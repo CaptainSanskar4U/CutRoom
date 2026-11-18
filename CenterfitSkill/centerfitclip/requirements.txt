@@ -1,0 +1,4 @@
+numpy
+opencv-python-headless<5  # 4.x ships the Haar cascades; 5.x pip wheels do not
+# system: ffmpeg + ffprobe (>=5) with libx264, drawtext (freetype) and zoompan
+# optional (for real captions): faster-whisper  OR  openai-whisper

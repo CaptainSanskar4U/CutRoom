@@ -94,6 +94,18 @@ def add_clips(c,project,candidates,prefs,exclude=()):
     for cand in candidates:
         if any(abs(cand['s']-a)<.42 and abs(cand['e']-b)<.42 for a,b in exclude): continue
         id=store.uid(); edit=schema.initial_edit(prefs,brand)
+        if cand.get('rendered_video') and Path(cand['rendered_video']).is_file():
+            edit['centerfit_video'] = f"/api/clips/{id}/video"
+            clip_file = media.project_dir(project['id']) / 'clips' / f"{id}.mp4"
+            clip_file.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copyfile(cand['rendered_video'], str(clip_file))
+            key = media.thumb_key(cand['s'], cand['e'])
+            f = media.thumb_file(project, key)
+            try:
+                video.still(clip_file, f, min(1.0, (cand['e'] - cand['s']) * 0.5), 480)
+                cand['poster_key'] = key
+            except Exception: pass
         c.execute('INSERT INTO clips (id,project_id,title,start_at,end_at,score,insights,edit,created) VALUES(?,?,?,?,?,?,?,?,?)',
             (id,project['id'],cand['title'],cand['s'],cand['e'],cand['score'],dump({k:v for k,v in cand.items() if k not in ('title','s','e','score')}),dump(edit),now))
         ids.append(id)
@@ -148,7 +160,6 @@ def analysis_job(job,project,report):
             ranges = [(c['s'], c['e']) for c in candidates]
             track = video.track_video(preview_path, info, lambda f: report(62 + 18 * f, 'Precision subject tracking'), ranges=ranges)
             
-            report(82, 'Enhance & Polish: Applying kinetic typography & motion styling...')
             faces = sum(x['n'] > 0 for x in track)
             data = dict(
                 info=info | {'language': prefs.get('language', 'auto'), 'speakers': 1, 'face_frames': faces, 'scene_changes': sum(x['cut'] for x in track), 'bytes': preview_path.stat().st_size},
@@ -157,7 +168,30 @@ def analysis_job(job,project,report):
                 waveform=[],
                 candidates=candidates
             )
-            report(90, 'Enhance & Polish: Generating hook cards & B-roll insights...')
+
+            # Enhance & Polish stage (82% - 96%):
+            is_centerfit = prefs.get('layout') == 'fit'
+            if is_centerfit:
+                report(82, 'Enhance & Polish: Executing CenterFitClip AI Editing Skill...')
+                from . import centerfit_skill
+                clips_tmp_dir = folder / 'temp_clips'
+                clips_tmp_dir.mkdir(parents=True, exist_ok=True)
+                src_to_use = preview_path if preview_path.is_file() and preview_path.stat().st_size > 1000 else source_path
+                for idx, cand in enumerate(candidates):
+                    pct = 82 + int((idx + 1) / max(1, len(candidates)) * 12)
+                    report(pct, f"Enhance & Polish: CenterFitClip rendering clip {idx+1}/{len(candidates)}...")
+                    out_clip = clips_tmp_dir / f"clip_{idx}.mp4"
+                    try:
+                        res = centerfit_skill.execute_centerfit_skill(src_to_use, cand, telemetry['words'], out_clip)
+                        cand['rendered_video'] = str(out_clip)
+                        cand['centerfit_metadata'] = res
+                        cand['title'] = f"{res['hook1']} {res['hook2']}"
+                    except Exception as e:
+                        LOG.warning('centerfit_skill_execution_failed idx=%s err=%s', idx, e)
+            else:
+                report(82, 'Enhance & Polish: Applying kinetic typography & motion styling...')
+            
+            report(94, 'Enhance & Polish: Generating hook cards & B-roll insights...')
             poster_at = min(data['info']['duration'] - .04, data['candidates'][0]['s'] + 1.2)
             try: video.still(preview_path, folder/'poster.jpg', poster_at)
             except Exception: pass
@@ -219,6 +253,29 @@ def analysis_job(job,project,report):
     info = video.inspect(path)
     report(3, 'Reading source media')
     data = analyze_file(path, preview_path, report, prefs, heatmap=telemetry.get('heatmap', []) if telemetry else [])
+    
+    # Enhance & Polish stage for local upload / fallback (82% - 96%):
+    is_centerfit = prefs.get('layout') == 'fit'
+    if is_centerfit:
+        report(82, 'Enhance & Polish: Executing CenterFitClip AI Editing Skill...')
+        from . import centerfit_skill
+        clips_tmp_dir = folder / 'temp_clips'
+        clips_tmp_dir.mkdir(parents=True, exist_ok=True)
+        src_to_use = preview_path if preview_path.is_file() and preview_path.stat().st_size > 1000 else path
+        for idx, cand in enumerate(data['candidates']):
+            pct = 82 + int((idx + 1) / max(1, len(data['candidates'])) * 12)
+            report(pct, f"Enhance & Polish: CenterFitClip rendering clip {idx+1}/{len(data['candidates'])}...")
+            out_clip = clips_tmp_dir / f"clip_{idx}.mp4"
+            try:
+                res = centerfit_skill.execute_centerfit_skill(src_to_use, cand, data['words'], out_clip)
+                cand['rendered_video'] = str(out_clip)
+                cand['centerfit_metadata'] = res
+                cand['title'] = f"{res['hook1']} {res['hook2']}"
+            except Exception as e:
+                LOG.warning('centerfit_skill_execution_failed idx=%s err=%s', idx, e)
+    else:
+        report(82, 'Enhance & Polish: Applying kinetic typography & motion styling...')
+
     report(96, 'Saving clips and preview')
     data['info']['bytes'] = path.stat().st_size
     poster_at = min(data['info']['duration'] - .04, data['candidates'][0]['s'] + 1.2)
@@ -256,7 +313,25 @@ def render_job(job,project,report):
     with db() as c:
         assets={r['id']:dict(r)|{'details':load(r['details'])} for r in c.execute('SELECT * FROM assets WHERE user_id=?',(project['user_id'],)).fetchall()}
     report(2,'Building render graph')
-    result=video.render(media.source_file(project),dest/'clip.mp4',analysis['info'],analysis,clip,options,assets,lambda f:report(3+94*f,'Encoding MP4'))
+    framing = clip.get('edit', {}).get('framing', 'track')
+    if framing == 'fit':
+        report(10, 'Enhance & Polish: Executing CenterFitClip AI Editing Skill...')
+        from . import centerfit_skill
+        cand = {'s': clip['start_at'], 'e': clip['end_at'], 'title': clip['title'], 'hook': clip.get('insights', {}).get('hook', '')}
+        src_file = media.source_file(project)
+        if not src_file.is_file() or not src_file.stat().st_size:
+            src_file = media.preview_file(project)
+        centerfit_skill.execute_centerfit_skill(
+            src_file,
+            cand,
+            analysis.get('words', []),
+            dest / 'clip.mp4',
+            lambda p, msg: report(10 + int(p * 0.85), msg)
+        )
+        info = video.inspect(dest / 'clip.mp4')
+        result = {'width': info['width'], 'height': info['height'], 'duration': info['duration'], 'bytes': (dest / 'clip.mp4').stat().st_size}
+    else:
+        result=video.render(media.source_file(project),dest/'clip.mp4',analysis['info'],analysis,clip,options,assets,lambda f:report(3+94*f,'Encoding MP4'))
     (dest/'captions.srt').write_text(video.srt(analysis['words'],clip['start_at'],clip['end_at'],clip['edit']),encoding='utf8')
     cloud_url = media.sync_to_supabase_storage(dest/'clip.mp4', f"exports/{job['id']}/clip.mp4")
     media.sync_to_supabase_storage(dest/'captions.srt', f"exports/{job['id']}/captions.srt")

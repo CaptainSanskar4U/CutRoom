@@ -220,7 +220,18 @@ def own_clip(c,id,user):
     return dict(p)
 
 def clip_json(r):
-    return {k:r[k] for k in ('id','project_id','title','start_at','end_at','score','version','created')}|{'insights':load(r['insights'],{}),'edit':load(r['edit'],{}),'poster':f"/api/clips/{r['id']}/poster" if load(r['insights'],{}).get('poster_key') else None}
+    insights = load(r['insights'], {})
+    edit = load(r['edit'], {})
+    clip_id = r['id']
+    project_id = r['project_id']
+    clip_file = media.project_dir(project_id) / 'clips' / f"{clip_id}.mp4"
+    has_video = clip_file.is_file()
+    return {k:r[k] for k in ('id','project_id','title','start_at','end_at','score','version','created')}|{
+        'insights': insights,
+        'edit': edit,
+        'poster': f"/api/clips/{clip_id}/poster" if insights.get('poster_key') else None,
+        'video': f"/api/clips/{clip_id}/video" if has_video else None
+    }
 
 def project_json(c,p):
     result={k:p[k] for k in ('id','title','filename','status','bytes','received','sample','created','updated')}
@@ -425,6 +436,17 @@ def preview(id:schema.Id,me=Depends(require)):
 @app.get('/api/clips/{id}')
 def get_clip(id:schema.Id,me=Depends(require)):
     with db() as c: return clip_json(own_clip(c,id,me['id']))
+
+
+@app.get('/api/clips/{id}/video')
+def clip_video(id:schema.Id, me=Depends(require)):
+    with db() as c:
+        clip = own_clip(c, id, me['id'])
+        p = own(c, clip['project_id'], me['id'])
+    clip_file = media.project_dir(p['id']) / 'clips' / f"{id}.mp4"
+    if not clip_file.is_file():
+        err(404, 'Rendered clip not found.')
+    return private(clip_file, 'video/mp4')
 
 
 @app.get('/api/clips/{id}/poster')

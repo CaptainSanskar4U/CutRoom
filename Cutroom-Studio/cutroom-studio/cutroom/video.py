@@ -545,6 +545,24 @@ def render(source,dest,meta,analysis,clip,options,assets,progress,depth=0):
     ow,oh=output_size(edit['ratio'],options['resolution']); w,h=meta['width'],meta['height']
     keep=kept_ranges(start,end,edit['cuts']); output_duration=sum(b-a for a,b in keep)
     if output_duration<.5: raise MediaError('Adjust your trims. At least half a second must remain.')
+    framing=edit.get('framing', 'track')
+    if framing == 'fit':
+        from . import centerfit_skill
+        insights = clip.get('insights', {})
+        if isinstance(insights, str):
+            try: insights = json.loads(insights)
+            except Exception: insights = {}
+        cand = {'s': start, 'e': end, 'title': clip.get('title', ''), 'hook': (insights or {}).get('hook', '')}
+        dest_path = Path(dest)
+        centerfit_skill.execute_centerfit_skill(
+            Path(source),
+            cand,
+            analysis.get('words', []),
+            dest_path,
+            lambda p, msg: progress(p / 100.0) if progress else None
+        )
+        dest_info = inspect(dest_path)
+        return {'width': dest_info['width'], 'height': dest_info['height'], 'duration': dest_info['duration'], 'bytes': dest_path.stat().st_size}
     with tempfile.TemporaryDirectory(prefix='cutroom-render-',dir=Path(dest).parent) as td:
         work=Path(td); output=work/'final.mp4'
         track=analysis.get('track',[])

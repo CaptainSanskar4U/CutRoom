@@ -24,7 +24,11 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   const fontsLoaded = new Set();
   const assetsLocal = [...assets];
   const full = Math.max(.6, Number(project.info.duration));
-  const clock = () => Number.isFinite(video.currentTime) && ready ? video.currentTime : seekTo;
+  const isCenterFitRendered = () => draft.edit.framing === 'fit' && !!clip.video;
+  const clock = () => {
+    const raw = Number.isFinite(video.currentTime) && ready ? video.currentTime : seekTo;
+    return isCenterFitRendered() ? (draft.start_at + raw) : raw;
+  };
   function pick(c) { return { title: c.title, start_at: c.start_at, end_at: c.end_at, edit: clone(c.edit) }; }
   const de = (name, extras = '') => `data-ed="${name}" ${extras}`;
   const goBack = `href="#project/${project.id}"`;
@@ -105,7 +109,11 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
     draw();
   }
   function seek(seconds) {
-    seekTo = clamp(seconds, 0, Math.max(0, full - .02)); if (ready) video.currentTime = seekTo; t = seekTo; draw();
+    seekTo = clamp(seconds, 0, Math.max(0, full - .02));
+    if (ready) {
+      video.currentTime = isCenterFitRendered() ? clamp(seekTo - draft.start_at, 0, durationOut) : seekTo;
+    }
+    t = seekTo; draw();
   }
   function skipCuts(at) {
     if (!keep.length) return draft.end_at;
@@ -142,10 +150,25 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
     const boundW = box.width - 23, boundH = box.height - 18;
     frameWidth = Math.max(40, Math.min(boundW, boundH * r)); frameHeight = frameWidth / r;
     frame.style.width = frameWidth + 'px'; frame.style.height = frameHeight + 'px'; frame.style.background = e.background;
-    const sw = video.videoWidth || project.info.width, sh = video.videoHeight || project.info.height;
+    const isCenterFitRendered = e.framing === 'fit' && !!clip.video;
+    const targetSrc = isCenterFitRendered ? clip.video : project.preview;
+    if (video.getAttribute('data-src') !== targetSrc) {
+      video.setAttribute('data-src', targetSrc);
+      video.src = targetSrc;
+      video.currentTime = isCenterFitRendered ? clamp(t - draft.start_at, 0, durationOut) : t;
+    }
+    const sw = video.videoWidth || (isCenterFitRendered ? 720 : project.info.width), sh = video.videoHeight || (isCenterFitRendered ? 1280 : project.info.height);
     if (secondary.hasAttribute('src')) { secondary.pause(); secondary.removeAttribute('src'); secondary.load(); }
     pane2.style.display = 'none'; pane.style.width = ''; pane.style.height = ''; pane.style.left = ''; pane.style.top = '';
-    fitVideo(video, frameWidth, frameHeight, sw, sh, x, y, e.framing === 'fit');
+    if (isCenterFitRendered) {
+      pane.style.width = frameWidth + 'px'; pane.style.height = frameHeight + 'px';
+      video.style.width = frameWidth + 'px'; video.style.height = frameHeight + 'px';
+      video.style.transform = '';
+      capPreview.innerHTML = '';
+      return null;
+    } else {
+      fitVideo(video, frameWidth, frameHeight, sw, sh, x, y, e.framing === 'fit');
+    }
     const u = Math.min(frameWidth, frameHeight) / 1080, cap = e.caption;
     let active = null; if (cap.enabled) {
       let low = 0, high = captionGroups.length; while (low < high) { const i = (low + high) >> 1; if (captionGroups[i][0].s <= t) low = i + 1; else high = i; }
@@ -164,7 +187,18 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   }
   function draw() {
     if (!active) return; const here = clock();
-    if (!video.paused) { const next = skipCuts(Math.max(draft.start_at, here)); if (here >= draft.end_at - .025 || next >= draft.end_at - .014) { video.pause(); seekTo = Math.max(draft.start_at, draft.end_at - .025); video.currentTime = seekTo; } else if (next > here + .03) { video.currentTime = next; } }
+    if (!video.paused) {
+      if (isCenterFitRendered()) {
+        if (video.currentTime >= durationOut - 0.04) {
+          video.pause(); video.currentTime = 0; seekTo = draft.start_at;
+        }
+      } else {
+        const next = skipCuts(Math.max(draft.start_at, here));
+        if (here >= draft.end_at - .025 || next >= draft.end_at - .014) {
+          video.pause(); seekTo = Math.max(draft.start_at, draft.end_at - .025); video.currentTime = seekTo;
+        } else if (next > here + .03) { video.currentTime = next; }
+      }
+    }
     t = clock(); timeEl.textContent = `${time(elapsedOut(t), true)} / ${time(durationOut)}`; pHead.style.left = `${clamp(t / full) * 100}%`; $('#source-time', root).textContent = time(t, true);
     const kw = compose(); if (kw?.i !== lastActive) { lastActive = kw?.i ?? -1; const previous = $('.tr-word.hot', wordsEl); if (previous) previous.classList.remove('hot'); const next = $(`.tr-word[data-index="${lastActive}"]`, wordsEl); next?.classList.add('hot'); }
   }
