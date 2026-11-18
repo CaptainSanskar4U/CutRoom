@@ -207,7 +207,12 @@ def parse_subtitles_to_words(raw_bytes, ext):
 def extract_platform_telemetry(url):
     """Bulletproof Native Subtitle & Telemetry Snatcher: bypasses YouTube 429 translation blocks."""
     import yt_dlp, urllib.request
-    opts = {'quiet': True, 'skip_download': True, 'no_warnings': True}
+    opts = {
+        'quiet': True,
+        'skip_download': True,
+        'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'ios']}}
+    }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
         heatmap = info.get('heatmap') or []
@@ -272,15 +277,23 @@ def download_fast_proxy(url, dest, limit, cb):
         'noplaylist': True,
         'progress_hooks': [hook],
         'max_filesize': limit,
-        'concurrent_fragment_downloads': 8
+        'concurrent_fragment_downloads': 8,
+        'extractor_args': {'youtube': {'player_client': ['android', 'ios']}}
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         fname = ydl.prepare_filename(info)
+        target = None
         if os.path.exists(fname):
-            if Path(fname).resolve() != dest.resolve():
+            target = Path(fname)
+        else:
+            candidates = list(dest.parent.glob(dest.name + ".*"))
+            if candidates:
+                target = candidates[0]
+        if target and target.is_file():
+            if target.resolve() != dest.resolve():
                 if dest.exists(): dest.unlink()
-                shutil.move(fname, str(dest))
+                shutil.move(str(target), str(dest))
             return dest.stat().st_size
     raise ImportErrorMessage("Failed to download video proxy from link.")
 
@@ -302,15 +315,23 @@ def download_audio_stream(url, dest, limit, cb):
         'noplaylist': True,
         'progress_hooks': [hook],
         'max_filesize': limit,
-        'concurrent_fragment_downloads': 8
+        'concurrent_fragment_downloads': 8,
+        'extractor_args': {'youtube': {'player_client': ['android', 'ios']}}
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         fname = ydl.prepare_filename(info)
+        target = None
         if os.path.exists(fname):
-            if Path(fname).resolve() != dest.resolve():
+            target = Path(fname)
+        else:
+            candidates = list(dest.parent.glob(dest.name + ".*"))
+            if candidates:
+                target = candidates[0]
+        if target and target.is_file():
+            if target.resolve() != dest.resolve():
                 if dest.exists(): dest.unlink()
-                shutil.move(fname, str(dest))
+                shutil.move(str(target), str(dest))
             return dest.stat().st_size
     raise ImportErrorMessage("Failed to download audio stream from link.")
 
@@ -333,15 +354,23 @@ def import_video(url,dest,limit,cb):
             'noplaylist': True,
             'progress_hooks': [hook],
             'max_filesize': limit,
-            'concurrent_fragment_downloads': 8
+            'concurrent_fragment_downloads': 8,
+            'extractor_args': {'youtube': {'player_client': ['android', 'ios']}}
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             fname = ydl.prepare_filename(info)
+            target = None
             if os.path.exists(fname):
-                if Path(fname).resolve() != dest.resolve():
+                target = Path(fname)
+            else:
+                candidates = list(dest.parent.glob(dest.name + ".*"))
+                if candidates:
+                    target = candidates[0]
+            if target and target.is_file():
+                if target.resolve() != dest.resolve():
                     if dest.exists(): dest.unlink()
-                    shutil.move(fname, str(dest))
+                    shutil.move(str(target), str(dest))
                 return dest.stat().st_size
         raise ImportErrorMessage("Failed to download video from link.")
 

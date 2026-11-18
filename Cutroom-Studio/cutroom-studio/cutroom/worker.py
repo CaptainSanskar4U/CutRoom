@@ -167,15 +167,41 @@ def analysis_job(job,project,report):
                     lambda cur, tot: report(8 + 15 * min(1, cur/max(tot,1)), f"Fetching audio · {cur//(1024**2)} MB"))
             except Exception: pass
             report(25, 'Fetching preview media...')
-            media.download_fast_proxy(project['source_url'], preview_path, config.MAX_BYTES,
-                lambda cur, tot: report(25 + 25 * min(1, cur/max(tot,1)), 'Fetching preview media'))
+            try:
+                media.download_fast_proxy(project['source_url'], preview_path, config.MAX_BYTES,
+                    lambda cur, tot: report(25 + 25 * min(1, cur/max(tot,1)), 'Fetching preview media'))
+            except Exception:
+                try:
+                    media.import_video(project['source_url'], preview_path, config.MAX_BYTES,
+                        lambda cur, tot: report(25 + 25 * min(1, cur/max(tot,1)), 'Fetching video media'))
+                except Exception: pass
             if not source_path.is_file() and preview_path.is_file():
                 try: os.link(str(preview_path), str(source_path))
                 except OSError: shutil.copyfile(str(preview_path), str(source_path))
 
+    # Resilient fallback for URL imports: ensure video is downloaded before standard analysis
+    if project.get('source_url') and (not source_path.is_file() or not source_path.stat().st_size):
+        if preview_path.is_file() and preview_path.stat().st_size:
+            try: os.link(str(preview_path), str(source_path))
+            except OSError: shutil.copyfile(str(preview_path), str(source_path))
+        else:
+            report(8, 'Fetching video from link...')
+            try:
+                media.import_video(project['source_url'], source_path, config.MAX_BYTES,
+                    lambda cur, tot: report(8 + 30 * min(1, cur/max(tot,1)), f"Downloading video · {cur//(1024**2)} MB"))
+                if not preview_path.is_file() and source_path.is_file():
+                    try: os.link(str(source_path), str(preview_path))
+                    except OSError: shutil.copyfile(str(source_path), str(preview_path))
+            except Exception as e:
+                LOG.error('import_video_fallback_failed err=%s', e)
+                raise video.MediaError(f'Failed to download video from link. Please verify the URL or upload directly: {e}')
+
     # Standard analysis for local files or fallback
     path = media.source_file(project)
-    if not path.is_file() or not path.stat().st_size: raise video.MediaError('The source upload is incomplete. Select your original file and resume the upload.')
+    if not path.is_file() or not path.stat().st_size:
+        if project.get('source_url'):
+            raise video.MediaError('The video could not be retrieved from the provided link. Please check the URL or upload the file directly.')
+        raise video.MediaError('The source upload is incomplete. Select your original file and resume the upload.')
     info = video.inspect(path)
     report(3, 'Reading source media')
     data = analyze_file(path, preview_path, report, prefs, heatmap=telemetry.get('heatmap', []) if telemetry else [])
@@ -189,7 +215,8 @@ def analysis_job(job,project,report):
     with db(True) as c:
         verify(c, job)
         ids = add_clips(c, project, data['candidates'], prefs)
-        c.execute("UPDATE projects SET status='ready',info=?,updated=? WHERE id=?", (dump(data['info']), NOW(), project['id']))
+        proj_title = (telemetry.get('title') if telemetry else None) or project['title']
+        c.execute("UPDATE projects SET title=?,status='ready',info=?,updated=? WHERE id=?", (proj_title, dump(data['info']), NOW(), project['id']))
         done(c, job, {'clip_ids': ids})
 
 
