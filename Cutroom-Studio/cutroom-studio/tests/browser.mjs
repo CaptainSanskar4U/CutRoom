@@ -1,0 +1,44 @@
+/** Real interactive smoke test. Supply PLAYWRIGHT_MODULE if using an isolated npm prefix. */
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
+const url=process.env.CUTROOM_BASE||'http://127.0.0.1:3000';
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const context=await browser.newContext({viewport:{width:1440,height:900},acceptDownloads:true});
+const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+try{
+ await page.goto(url,{waitUntil:'networkidle'});
+ assert.equal(await page.locator('.project-card').count(),3);
+ await page.getByRole('button',{name:'Upload video',exact:true}).click();
+ await page.locator('#source-file').setInputFiles(fileURLToPath(new URL('../samples/lunar.mp4',import.meta.url)));
+ await page.getByRole('dialog').getByRole('button',{name:'Generate clips',exact:true}).click();
+ await page.getByRole('heading',{name:'Your clips',exact:true}).waitFor({timeout:150000});
+ const projectURL=page.url();
+ await page.getByRole('button',{name:'Edit clip',exact:true}).first().click();
+ await page.getByRole('heading',{name:'Inspector'}).waitFor({timeout:11000});
+ await page.locator('#clip-player').evaluate(v=>new Promise(resolve=>{if(v.readyState>=2)resolve();else v.addEventListener('loadeddata',resolve,{once:true});}));
+ await page.locator('#player-ratios').getByRole('button',{name:'4:5',exact:true}).click();
+ const word=page.locator('.tr-word').first();await word.click();
+ await page.getByRole('dialog').getByLabel('Caption text').fill('Browser verified');
+ await page.getByRole('button',{name:'Save word',exact:true}).click();
+ assert.equal(await page.locator('.tr-word').first().textContent(),'Browser verified');
+ await page.getByRole('button',{name:'Undo',exact:true}).click();
+ assert.notEqual(await page.locator('.tr-word').first().textContent(),'Browser verified');
+ await page.getByRole('button',{name:'Redo',exact:true}).click();
+ assert.equal(await page.locator('.tr-word').first().textContent(),'Browser verified');
+ await page.getByRole('button',{name:'Save edits',exact:true}).click();
+ await page.getByText('Clip edits saved.').waitFor({timeout:10000});
+ await page.getByRole('button',{name:'Export',exact:true}).click();
+ await page.getByLabel('Resolution').selectOption('480');
+ await page.getByRole('button',{name:'Start render',exact:true}).click();
+ await page.getByRole('heading',{name:'Export center',exact:true}).waitFor({timeout:12000});
+ const download=page.getByRole('link',{name:'MP4',exact:true});
+ await download.waitFor({timeout:150000});
+ const [file]=await Promise.all([page.waitForEvent('download'),download.click()]);
+ assert.ok(file.suggestedFilename().endsWith('.mp4'));assert.equal(await file.failure(),null);
+ const caption=page.getByRole('link',{name:'SRT',exact:true});
+ const r=await page.request.get(new URL(await caption.getAttribute('href'),page.url()).href);assert.match(await r.text(),/Browser verified/);
+ await page.goto(projectURL);await page.getByRole('heading',{name:'Your clips',exact:true}).waitFor();
+ assert.equal(errors.length,0,errors.join('\n'));
+ console.log('Browser passed: local upload, real analyze, edit word, undo/redo, 4:5, save, render, MP4 download, corrected SRT, project reopen.');
+}finally{ await browser.close(); }

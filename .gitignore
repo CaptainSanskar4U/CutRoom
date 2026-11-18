@@ -1,0 +1,71 @@
+# Environments & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.turbo/
+dist/
+build/
+
+# Application Media & Large Cache (keep samples)
+data/
+storage/
+.cache/
+*.log
+
+# Root test media outputs (prune test artifacts, keep source code)
+*.mp4
+*.mp3
+*.wav
+*.avi
+!Cutroom-Studio/cutroom-studio/samples/*.mp4
+
+# External & Scratch Tooling
+rea/
+scratch/
+.playwright-mcp/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+test_rendered_frame.jpg

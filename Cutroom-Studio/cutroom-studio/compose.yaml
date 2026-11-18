@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cutroom
+      POSTGRES_USER: cutroom
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U cutroom -d cutroom"]
+      interval: 5s
+      timeout: 4s
+      retries: 10
+    volumes: ["db:/var/lib/postgresql/data"]
+    restart: unless-stopped
+  api:
+    image: cutroom-studio:local
+    build: .
+    environment: &shared-env
+      DATABASE_URL: postgresql://cutroom:${POSTGRES_PASSWORD}@postgres:5432/cutroom
+      CUTROOM_PUBLIC_ORIGIN: ${CUTROOM_PUBLIC_ORIGIN:-}
+      CUTROOM_SECURE_COOKIE: ${CUTROOM_SECURE_COOKIE:-auto}
+      CUTROOM_IMPORT_HOSTS: ${CUTROOM_IMPORT_HOSTS:-upload.wikimedia.org,images-assets.nasa.gov,svs.gsfc.nasa.gov,assets.science.nasa.gov}
+      CUTROOM_THREADS: ${CUTROOM_THREADS:-2}
+      CUTROOM_GUEST: ${CUTROOM_GUEST:-1}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      CUTROOM_METRICS_ENABLED: ${CUTROOM_METRICS_ENABLED:-0}
+    volumes: ["media:/var/lib/cutroom"]
+    ports: ["${CUTROOM_BIND:-127.0.0.1}:${CUTROOM_PORT:-3000}:3000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/healthz', timeout=2)"]
+      interval: 15s
+      timeout: 4s
+      retries: 4
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+  worker:
+    image: cutroom-studio:local
+    build: .
+    command: [python, -m, cutroom.worker]
+    environment:
+      <<: *shared-env
+      CUTROOM_LLM_ENDPOINT: ${CUTROOM_LLM_ENDPOINT:-}
+      CUTROOM_LLM_API_KEY: ${CUTROOM_LLM_API_KEY:-}
+      CUTROOM_LLM_MODEL: ${CUTROOM_LLM_MODEL:-gpt-4.1-mini}
+    volumes: ["media:/var/lib/cutroom"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    stop_grace_period: 45s
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+volumes:
+  db:
+  media:
