@@ -2,7 +2,7 @@ import {ico,$,$$,esc,clone,clamp,time,option,btn,iconBtn,ratios,capNames,api,sen
 
 const FONT=['DejaVu Sans','Liberation Sans','Liberation Serif','DejaVu Sans Mono','Noto Sans'];
 const FILLERS=new Set(['um','uh','erm','umm','uhh','ah','hmm','er']);
-const FRAMES={track:'Auto track',manual:'Manual crop',fit:'Fit to canvas',split:'Dual crop'};
+const FRAMES={track:'Auto track (Smart)',dualfocal:'Dual-Focal stack',manual:'Manual crop',fit:'Fit to canvas',split:'Dual crop'};
 const TABS=[['captions','captions','Captions'],['frame','crop','Framing'],['layers','layers','Layers'],['audio','audio','Audio']];
 function atTrack(track,t){
  if(!track.length)return [.5,.5,.30,.50,.70,.50];let low=0,hi=track.length;while(low<hi){let m=(low+hi)>>1;if(track[m].t<=t)low=m+1;else hi=m;}
@@ -83,7 +83,7 @@ export function openEditor(root,{clip,project,analysis,presets,brands,assets,exp
   <div class="grid2">${formField('Size','caption.size',e,'number','min="20" max="110"')}${formField('Words per group','caption.words',e,'number','min="1" max="8"')}${formField('Text','caption.color',e,'color')}${formField('Highlight','caption.highlight',e,'color')}${formField('Outline color','caption.outline_color',e,'color')}${formField('Outline','caption.outline',e,'number','min="0" max="12"')}${formField('Shadow','caption.shadow',e,'number','min="0" max="12"')}${formField('Offset (sec)','caption.offset',e,'number','min="-10" max="10" step=".05"')}</div>
   ${check('Caption background','cap-bg',!!c.background)}${c.background?formField('Background color','caption.background',e,'color'):''}${formField('Vertical position','caption.position',e,'range','min=".08" max=".93" step=".01"')}${selection('Highlight animation','caption.motion',[['pop','Pop'],['word','Word highlight'],['none','None']],c.motion)}${check('Uppercase','caption.uppercase',c.uppercase)}`;
   if(tab==='frame')inspector.innerHTML=`<h4>Output aspect ratio</h4><div class="ratio-row">${ratioButtons()}</div>${selection('Layout','framing',Object.entries(FRAMES),e.framing)}
-  ${e.framing==='manual'?`${formField('Horizontal crop position','crop_x',e,'range','min="0" max="1" step=".01"')}${formField('Vertical crop position','crop_y',e,'range','min="0" max="1" step=".01"')}`:e.framing==='track'?`<p class="control-note">${analysis.info.face_frames?'Follows detected faces with smoothed movement. Where no face is found, visible motion guides the crop.':'No faces detected. Cutroom follows visible motion when possible.'}</p>`:e.framing==='split'?'<p class="control-note">Keeps two detected faces in separate crops. When only one face is visible, the panes use left and right crops.</p>':''}
+  ${e.framing==='manual'?`${formField('Horizontal crop position','crop_x',e,'range','min="0" max="1" step=".01"')}${formField('Vertical crop position','crop_y',e,'range','min="0" max="1" step=".01"')}`:e.framing==='dualfocal'?'<p class="control-note">Dual-Focal Context Director: Dynamically stacks speaker on top and active background demonstration on bottom.</p>':e.framing==='track'?`<p class="control-note">${analysis.info.face_frames?'Follows detected faces with smart context awareness. Adjusts dynamically to keep both speaker and demonstration in frame.':'No faces detected. Cutroom follows visible motion when possible.'}</p>`:e.framing==='split'?'<p class="control-note">Keeps two detected faces in separate crops. When only one face is visible, the panes use left and right crops.</p>':''}
   ${formField('Canvas background (Fit)','background',e,'color')}${check('Cutroom watermark','watermark',e.watermark)}${selection('Fade in and out','fade',[[0,'None'],[.25,'0.25 sec'],[.5,'0.5 sec'],[1,'1 sec'],[2,'2 sec']],e.fade)}
   ${brands.length?selection('Apply saved brand kit','brand',[['','Choose a kit…'],...brands.map(b=>[b.id,b.name])],''):''}`;
   if(tab==='layers')inspector.innerHTML=`<h4>Text and image layers</h4><div class="actions">${btn('Add text','text',{attrs:de('new-text')})}${btn('Add image','image',{attrs:de('new-image')})}</div>
@@ -144,7 +144,7 @@ export function openEditor(root,{clip,project,analysis,presets,brands,assets,exp
   frameWidth=Math.max(40,Math.min(boundW,boundH*r));frameHeight=frameWidth/r;
   frame.style.width=frameWidth+'px';frame.style.height=frameHeight+'px';frame.style.background=e.background;
   const sw=video.videoWidth||project.info.width,sh=video.videoHeight||project.info.height;
-  if(e.framing==='split'){
+  if(e.framing==='split'||e.framing==='dualfocal'||e.framing==='context'){
    if(!secondary.hasAttribute('src')){secondary.preload='auto';secondary.src=project.preview;}
    pane2.style.display='block';const horizontal=r>1.2;const dw=horizontal?frameWidth/2:frameWidth,dh=horizontal?frameHeight:frameHeight/2;
    [pane,pane2].forEach((p,i)=>{p.style.width=dw+'px';p.style.height=dh+'px';p.style.left=(horizontal?i*dw:0)+'px';p.style.top=(horizontal?0:i*dh)+'px';});

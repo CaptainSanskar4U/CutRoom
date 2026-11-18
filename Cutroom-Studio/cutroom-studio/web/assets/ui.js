@@ -21,7 +21,7 @@ export const durationLabel={auto:'Smart length',short:'10–30 seconds',medium:'
 export const ratios=['9:16','16:9','1:1','4:5'];
 export const languages={auto:'Auto-detect',en:'English',hi:'Hindi',es:'Spanish',fr:'French',pt:'Portuguese',de:'German',ja:'Japanese',zh:'Chinese',ko:'Korean',ta:'Tamil',mr:'Marathi',ar:'Arabic',it:'Italian',nl:'Dutch',ru:'Russian',id:'Indonesian'};
 export const capNames={pulse:'Pulse (Pop & Pill)',hormozi:'Hormozi (Bold Impact)',beast:'Beast (Viral Pop)',cinema:'Cinema (Minimal Glow)',studio:'Studio (Clean)',spotlight:'Spotlight (Boxed)',mono:'Mono (Tech)'};
-export const layoutChoices={track:'Full-Screen (AI Steadicam 9:16)',fit:'Centered (Ambient Blur Fit)',split:'Split Screen (Multicam)'};
+export const layoutChoices={track:'Auto Track (Context-Aware 9:16)',dualfocal:'Dual-Focal (Speaker + Demo Stack)',fit:'Centered (Ambient Blur Fit)',split:'Split Screen (Multicam)'};
 export const subtitleLanguages={auto:'Same as Spoken / Auto',en:'English',hi:'Hindi',es:'Spanish',fr:'French',pt:'Portuguese',de:'German',ja:'Japanese',zh:'Chinese',ko:'Korean',ta:'Tamil',mr:'Marathi',ar:'Arabic',it:'Italian',nl:'Dutch',ru:'Russian',id:'Indonesian'};
 
 export class ApiError extends Error{constructor(message,status,detail){super(message);this.status=status;this.detail=detail;}}

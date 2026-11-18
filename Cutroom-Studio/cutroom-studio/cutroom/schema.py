@@ -98,7 +98,7 @@ class Overlay(Strict):
 
 class Edit(Strict):
     ratio: Ratio = '9:16'
-    framing: Literal['track','manual','fit','split'] = 'track'
+    framing: Literal['track','manual','fit','split','dualfocal','context'] = 'track'
     crop_x: Point = .5
     crop_y: Point = .5
     background: Color = '#171322'
