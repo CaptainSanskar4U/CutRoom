@@ -14,7 +14,7 @@ class Strict(BaseModel):
 class Prefs(Strict):
     length: Literal['auto','short','medium','long'] = 'auto'
     ratio: Ratio = '9:16'
-    layout: Literal['track','fit','split'] = 'track'
+    layout: Literal['track','fit','split','dualfocal','context'] = 'track'
     language: Annotated[str, StringConstraints(pattern=r'^(auto|[a-z]{2,3})$')] = 'auto'
     subtitle_language: Annotated[str, StringConstraints(pattern=r'^(auto|[a-z]{2,3})$')] = 'auto'
     preset: Literal['pulse','hormozi','beast','cinema','studio','spotlight','mono'] = 'pulse'
