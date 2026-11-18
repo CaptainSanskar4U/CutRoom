@@ -25,6 +25,15 @@ async def lifecycle(_app):
 
 app=FastAPI(title='Cutroom Studio API',version='1.0.0',lifespan=lifecycle,docs_url='/api/docs',openapi_url='/api/openapi.json',redoc_url=None)
 
+@app.exception_handler(Exception)
+async def global_exception_handler(req: Request, exc: Exception):
+    import logging
+    logging.getLogger('cutroom').exception('Unhandled server exception on %s: %s', req.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={'detail': str(exc) if str(exc) else 'Server encountered an issue. Please retry.'}
+    )
+
 
 def origin(req):
     if config.PUBLIC_ORIGIN: return config.PUBLIC_ORIGIN

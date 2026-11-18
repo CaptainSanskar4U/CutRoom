@@ -23,12 +23,42 @@ class Connection:
     def execute(self, sql, args=()):
         return self.c.execute(sql.replace('?', '%s') if POSTGRES else sql, args)
 
+_POOL = None
+
+def get_pool():
+    global _POOL
+    if _POOL is None and POSTGRES:
+        try:
+            from psycopg_pool import ConnectionPool
+            from psycopg.rows import dict_row
+            _POOL = ConnectionPool(
+                conninfo=DATABASE_URL,
+                min_size=2,
+                max_size=10,
+                kwargs={"row_factory": dict_row, "connect_timeout": 8, "prepare_threshold": None},
+                open=True,
+                timeout=10.0,
+            )
+        except Exception:
+            _POOL = False
+    return _POOL if _POOL else None
+
 @contextmanager
 def db(write=False):
+    pool = get_pool()
+    if pool:
+        try:
+            with pool.connection(timeout=6.0) as c:
+                yield Connection(c)
+                c.commit()
+                return
+        except Exception:
+            pass
+
     if POSTGRES:
         import psycopg
         from psycopg.rows import dict_row
-        c = psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=10, prepare_threshold=None)
+        c = psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=8, prepare_threshold=None)
     else:
         c = sqlite3.connect(DATA / 'cutroom.sqlite3', timeout=15, isolation_level=None)
         c.row_factory = sqlite3.Row

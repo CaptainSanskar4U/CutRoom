@@ -27,20 +27,27 @@ export const subtitleLanguages={auto:'Same as Spoken / Auto',en:'English',hi:'Hi
 export class ApiError extends Error{constructor(message,status,detail){super(message);this.status=status;this.detail=detail;}}
 function msg(detail,fallback){return typeof detail==='string'?detail:Array.isArray(detail)?detail.map(e=>`${e.loc?.slice(1).join(' › ')||'Value'}: ${String(e.msg).replace(/^Value error, /,'')}`).join(' · '):detail?.message||fallback;}
 export async function api(path,method='GET',payload){
- let options={method,credentials:'same-origin',headers:{Accept:'application/json'}};
+ let options={method,credentials:'include',headers:{Accept:'application/json'}};
  if(payload!==undefined){options.body=JSON.stringify(payload);options.headers['Content-Type']='application/json';}
  let r;
- let attempts=2;
+ let attempts=3;
  while(attempts>0){
   try{
    r=await fetch('/api'+path,options);
-   break;
+   if(r&&r.status<500)break;
+   attempts--;
+   if(attempts<=0)break;
+   await new Promise(res=>setTimeout(res,600));
   }catch(err){
    attempts--;
-   if(attempts<=0)throw new ApiError('Could not reach the workspace. Check your connection and try again.',0);
-   await new Promise(res=>setTimeout(res,600));
+   if(attempts<=0){
+    const offline=!navigator.onLine;
+    throw new ApiError(offline?'No internet connection. Please check your network.':'CutRoom Studio is momentarily reconnecting. Please try again in a few seconds.',0);
+   }
+   await new Promise(res=>setTimeout(res,700));
   }
  }
+ if(!r)throw new ApiError('Could not reach CutRoom Studio. Ensure the server is running on port 3000.',0);
  if(r.status===204)return null;
  let data=null;try{data=await r.json();}catch{}
  if(!r.ok)throw new ApiError(msg(data?.detail,`Request could not finish (${r.status}).`),r.status,data?.detail);
