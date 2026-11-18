@@ -146,6 +146,7 @@ def initial_edit(prefs_or_ratio, brand=None):
         ratio = prefs_or_ratio
         framing = 'track'
         preset_name = 'pulse'
+    if framing not in ('fit', 'track'): framing = 'track'
     cap = PRESETS.get(preset_name, PRESETS['pulse'])
     data = Edit(ratio=ratio, framing=framing, caption=cap).model_dump()
     if brand:

@@ -147,41 +147,31 @@ def track_video(source,meta,cb,ranges=None):
                     if previous and abs(cx - previous[0]) + abs(cy - previous[1]) < .18 and previous[4] is not None and patch is not None:
                         activity = .70 * float(np.mean(np.abs(patch - previous[4]))) + .30 * previous[3]
                     area = min(1., bw * bh / (w * h) * 14)
-                    candidates.append([cx, cy, area, activity, patch])
+                    candidates.append([cx, cy, area, activity, patch, box])
                 if candidates:
                     picked = max(candidates, key=lambda x: x[2] + 2.5 * x[3] - .28 * abs(x[0] - selected[0]))
-                    aim = picked[:2]
+                    aim = [picked[0], picked[1]]
+
+                    # Safe Person Protection: Ensure the 9:16 crop window NEVER cuts off the person
+                    p_box = picked[5] if len(picked) > 5 else None
+                    if p_box is not None:
+                        bx, by, bw, bh = p_box[:4]
+                        half_crop = 0.5 * (9.0 / 16.0) * (h / w)  # normalized half-width of 9:16 crop in 16:9 frame
+                        p_left = max(0.0, (bx - 0.25 * bw) / w)
+                        p_right = min(1.0, (bx + 1.25 * bw) / w)
+                        
+                        # Never let the crop window cut into the person's left edge
+                        if aim[0] - half_crop > p_left:
+                            aim[0] = p_left + half_crop
+                        # Never let the crop window cut into the person's right edge
+                        elif aim[0] + half_crop < p_right:
+                            aim[0] = p_right - half_crop
+                            
+                        # Stay within valid video margins
+                        aim[0] = max(half_crop, min(1.0 - half_crop, aim[0]))
+
                     wide = sorted(candidates, key=lambda x: x[0]); ends = (wide[0], wide[-1])
-                    next_pair = [[q[0], q[1]] for q in ends] if len(wide) > 1 and ends[1][0] - ends[0][0] > .10 else None
-
-                    # --- Dual-Focal Context-Aware Intelligence ---
-                    # Detect demonstration activity & salient background objects outside primary face
-                    px_cx, px_cy = int(picked[0] * w), int(picked[1] * h)
-                    box_rx = int(max(w * 0.16, 32))
-                    box_ry = int(max(h * 0.22, 32))
-                    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
-                    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
-                    mag = cv2.magnitude(gx, gy)
-                    y_min, y_max = max(0, px_cy - box_ry), min(h, px_cy + box_ry)
-                    x_min, x_max = max(0, px_cx - box_rx), min(w, px_cx + box_rx)
-                    mag[y_min:y_max, x_min:x_max] = 0
-                    y_ind, x_ind = np.indices((h, w))
-                    tot_mag = float(np.sum(mag))
-                    if tot_mag > 15.0:
-                        act_x = float(np.sum(x_ind * mag) / tot_mag) / w
-                        act_y = float(np.sum(y_ind * mag) / tot_mag) / h
-                        dx = act_x - picked[0]
-                        if 0.10 <= abs(dx) <= 0.38:
-                            aim = [
-                                max(0.20, min(0.80, picked[0] + dx * 0.36)),
-                                max(0.25, min(0.75, 0.65 * picked[1] + 0.35 * act_y))
-                            ]
-                        elif abs(dx) > 0.38 and next_pair is None:
-                            next_pair = [[picked[0], picked[1]], [act_x, act_y]]
-
-                    if next_pair:
-                        pair = next_pair if pair is None else [[.62 * old + .38 * new for old, new in zip(o, n)] for o, n in zip(pair, next_pair)]
-                    else: pair = None
+                    pair = [[q[0], q[1]] for q in ends] if len(wide) > 1 and ends[1][0] - ends[0][0] > .10 else None
                 else:
                     gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
                     gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
@@ -197,12 +187,12 @@ def track_video(source,meta,cb,ranges=None):
                     anchor = list(aim)
                     selected = list(aim)
                 else:
-                    if abs(aim[0] - anchor[0]) > 0.045:
+                    if abs(aim[0] - anchor[0]) > 0.035:
                         anchor[0] = aim[0]
-                    if abs(aim[1] - anchor[1]) > 0.08:
+                    if abs(aim[1] - anchor[1]) > 0.050:
                         anchor[1] = aim[1]
-                    selected[0] += (anchor[0] - selected[0]) * 0.42
-                    selected[1] += (anchor[1] - selected[1]) * 0.30
+                    selected[0] += (anchor[0] - selected[0]) * 0.28
+                    selected[1] += (anchor[1] - selected[1]) * 0.22
                 tracks.append(dict(t=round(t, 3), x=round(selected[0], 4), y=round(selected[1], 4), n=len(candidates), cut=transition, m=round(motion, 4), p=[[round(z, 4) for z in q] for q in pair] if pair else None))
                 history = candidates; prev = grey_small; prevhist = hist
                 if j % 6 == 0 and cb:
@@ -581,11 +571,6 @@ def render(source,dest,meta,analysis,clip,options,assets,progress,depth=0):
                 f=crop_filter(w,h,subw,subh,cv_expression(keys,3+n*2),cv_expression(keys,4+n*2))
                 filters.append(f'[v{p}]{f}[side{n}]')
             filters.append('[side0][side1]'+('hstack' if horizontal else 'vstack')+'=inputs=2[frame]')
-        elif framing in ('dualfocal', 'context'):
-            director_keys = multicam_keyframes(track, start, end)
-            x = cv_expression(director_keys, 1)
-            y = cv_expression(director_keys, 2)
-            filters.append(f'{base},{crop_filter(w,h,ow,oh,x,y)}[frame]')
         else:
             x,y=(str(edit['crop_x']),str(edit['crop_y'])) if framing=='manual' else (cv_expression(keys,1),cv_expression(keys,2))
             filters.append(f'{base},{crop_filter(w,h,ow,oh,x,y)}[frame]')

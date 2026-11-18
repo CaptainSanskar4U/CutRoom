@@ -2,26 +2,12 @@ import { ico, $, $$, esc, clone, clamp, time, option, btn, iconBtn, ratios, capN
 
 const FONT = ['DejaVu Sans', 'Liberation Sans', 'Liberation Serif', 'DejaVu Sans Mono', 'Noto Sans'];
 const FILLERS = new Set(['um', 'uh', 'erm', 'umm', 'uhh', 'ah', 'hmm', 'er']);
-const FRAMES = { track: 'Auto track (Smart)', dualfocal: 'Viral Director (Multicam Switcher)', manual: 'Manual crop', fit: 'Fit to canvas', split: 'Dual crop (50/50 Split)' };
+const FRAMES = { fit: 'Center Fit', track: 'Full Screen' };
 const TABS = [['captions', 'captions', 'Captions'], ['frame', 'crop', 'Framing'], ['layers', 'layers', 'Layers'], ['audio', 'audio', 'Audio']];
 function atTrack(track, t) {
   if (!track.length) return [.5, .5, .30, .50, .70, .50]; let low = 0, hi = track.length; while (low < hi) { let m = (low + hi) >> 1; if (track[m].t <= t) low = m + 1; else hi = m; }
   const a = track[Math.max(0, low - 1)], b = track[Math.min(track.length - 1, low)], k = a === b || b.cut ? 0 : clamp((t - a.t) / Math.max(.001, b.t - a.t));
   const vector = q => [q.x, q.y, ...(q.p?.[0] || [.3, q.y]), ...(q.p?.[1] || [.7, q.y])]; const B = vector(b); return vector(a).map((x, i) => x + (B[i] - x) * k);
-}
-function directorCrop(track, t, start) {
-  const a = atTrack(track, t);
-  const rel = Math.max(0, t - start);
-  const hasDemo = Math.abs(a[4] - a[2]) > 0.08 || Math.abs(a[4] - a[0]) > 0.08;
-  if (rel < 2.5) {
-    return [a[0], a[1]];
-  }
-  const cycle = Math.floor((rel - 2.5) / 3.0);
-  if (cycle % 2 === 1) {
-    if (hasDemo) return [a[4], a[5]];
-    return [a[0], Math.max(0.18, a[1] - 0.045)];
-  }
-  return [a[0], a[1]];
 }
 function merged(cuts, start, end) { let cursor = start; const out = []; for (const q of [...cuts].sort((a, b) => a.s - b.s)) { const s = Math.max(start, q.s), e = Math.min(end, q.e); if (e <= s || e <= cursor) continue; if (s > cursor + .02) out.push([cursor, s]); cursor = Math.max(cursor, e); } if (end > cursor + .02) out.push([cursor, end]); return out; }
 function groups(words, n) { let out = [], cur = []; for (const w of words) { if (cur.length && (cur.length >= n || w.s - cur.at(-1).e > .42 || w.s - cur[0].s > 2.35 || (cur.length > 1 && /[.!?。！？]["”']?$/.test(cur.at(-1).t)))) { out.push(cur); cur = []; } cur.push(w); } if (cur.length) out.push(cur); return out; }
@@ -96,10 +82,8 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   ${selection('Font', 'caption.font', FONT.map(k => [k, k]), c.font)}${assetsLocal.some(a => a.kind === 'font') ? selection('Custom font', 'caption.font_id', [['', 'Use base font'], ...assetsLocal.filter(a => a.kind === 'font').map(a => [a.id, a.name])], c.font_id) : ''}${btn('Upload font', 'upload', { attrs: de('upload-font') })}<input type="file" id="edit-font-file" accept=".ttf,.otf" hidden>
   <div class="grid2">${formField('Size', 'caption.size', e, 'number', 'min="20" max="110"')}${formField('Words per group', 'caption.words', e, 'number', 'min="1" max="8"')}${formField('Text', 'caption.color', e, 'color')}${formField('Highlight', 'caption.highlight', e, 'color')}${formField('Outline color', 'caption.outline_color', e, 'color')}${formField('Outline', 'caption.outline', e, 'number', 'min="0" max="12"')}${formField('Shadow', 'caption.shadow', e, 'number', 'min="0" max="12"')}${formField('Offset (sec)', 'caption.offset', e, 'number', 'min="-10" max="10" step=".05"')}</div>
   ${check('Caption background', 'cap-bg', !!c.background)}${c.background ? formField('Background color', 'caption.background', e, 'color') : ''}${formField('Vertical position', 'caption.position', e, 'range', 'min=".08" max=".93" step=".01"')}${selection('Highlight animation', 'caption.motion', [['pop', 'Pop'], ['word', 'Word highlight'], ['none', 'None']], c.motion)}${check('Uppercase', 'caption.uppercase', c.uppercase)}`;
-    if (tab === 'frame') inspector.innerHTML = `<h4>Output aspect ratio</h4><div class="ratio-row">${ratioButtons()}</div>${selection('Layout', 'framing', Object.entries(FRAMES), e.framing)}
-  ${e.framing === 'manual' ? `${formField('Horizontal crop position', 'crop_x', e, 'range', 'min="0" max="1" step=".01"')}${formField('Vertical crop position', 'crop_y', e, 'range', 'min="0" max="1" step=".01"')}` : e.framing === 'dualfocal' ? '<p class="control-note">Viral Director: Automatically switches angles every 3s between Speaker portrait, close-up punch-in, and full-screen demonstration.</p>' : e.framing === 'track' ? `<p class="control-note">${analysis.info.face_frames ? 'Follows detected faces with smart context awareness. Adjusts dynamically to keep both speaker and demonstration in frame.' : 'No faces detected. Cutroom follows visible motion when possible.'}</p>` : e.framing === 'split' ? '<p class="control-note">Keeps two detected faces in separate crops. When only one face is visible, the panes use left and right crops.</p>' : ''}
-  ${formField('Canvas background (Fit)', 'background', e, 'color')}${check('Cutroom watermark', 'watermark', e.watermark)}${selection('Fade in and out', 'fade', [[0, 'None'], [.25, '0.25 sec'], [.5, '0.5 sec'], [1, '1 sec'], [2, '2 sec']], e.fade)}
-  ${brands.length ? selection('Apply saved brand kit', 'brand', [['', 'Choose a kit…'], ...brands.map(b => [b.id, b.name])], '') : ''}`;
+    if (tab === 'frame') inspector.innerHTML = `<h4>Output aspect ratio</h4><div class="ratio-row">${ratioButtons()}</div>${selection('Layout', 'framing', Object.entries(FRAMES), e.framing === 'fit' ? 'fit' : 'track')}
+  ${e.framing === 'fit' ? '<p class="control-note">Center Fit: Keeps original video centered with an ambient blurred background. Nothing is cropped.</p>' : '<p class="control-note">Full Screen: Video fills the entire screen edge-to-edge with smart face tracking and safe headroom.</p>'}`;
     if (tab === 'layers') inspector.innerHTML = `<h4>Text and image layers</h4><div class="actions">${btn('Add text', 'text', { attrs: de('new-text') })}${btn('Add image', 'image', { attrs: de('new-image') })}</div>
   ${e.overlays.length ? e.overlays.map((o, i) => `<div class="layer-line"><div class="row" style="min-width:0">${ico(o.type === 'image' ? 'image' : 'text', 12)} <span class="layer-name">${esc(o.type === 'text' ? o.text : assetsLocal.find(a => a.id === o.asset)?.name || 'Image layer')}</span></div><div class="row" style="gap:0">${iconBtn('Edit layer', 'edit', de('layer-edit', `data-index="${i}"`))}${iconBtn('Remove layer', 'trash', de('layer-delete', `data-index="${i}"`))}</div></div>`).join('') : '<p class="control-note">No layers yet. Add a title, logo, or timed image cutaway.</p>'}
   ${clip.insights.broll?.length ? `<h4>B-roll search ideas</h4><div class="broll-tags">${clip.insights.broll.map(t => `<span class="badge violet">${esc(t)}</span>`).join('')}</div><p class="tiny muted">Upload an image you have permission to use and set a layer timing.</p>` : ''}
@@ -153,25 +137,15 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   }
   function compose() {
     const e = draft.edit, a = atTrack(analysis.track, t);
-    let [x, y] = [a[0], a[1]];
-    if (e.framing === 'manual') {
-      [x, y] = [e.crop_x, e.crop_y];
-    } else if (e.framing === 'dualfocal' || e.framing === 'context') {
-      [x, y] = directorCrop(analysis.track, t, draft.start_at);
-    }
+    const [x, y] = [a[0], a[1]];
     const [w, h] = e.ratio.split(':').map(Number), box = stage.getBoundingClientRect(), r = w / h;
     const boundW = box.width - 23, boundH = box.height - 18;
     frameWidth = Math.max(40, Math.min(boundW, boundH * r)); frameHeight = frameWidth / r;
     frame.style.width = frameWidth + 'px'; frame.style.height = frameHeight + 'px'; frame.style.background = e.background;
     const sw = video.videoWidth || project.info.width, sh = video.videoHeight || project.info.height;
-    if (e.framing === 'split') {
-      if (!secondary.hasAttribute('src')) { secondary.preload = 'auto'; secondary.src = project.preview; }
-      pane2.style.display = 'block'; const horizontal = r > 1.2; const dw = horizontal ? frameWidth / 2 : frameWidth, dh = horizontal ? frameHeight : frameHeight / 2;
-      [pane, pane2].forEach((p, i) => { p.style.width = dw + 'px'; p.style.height = dh + 'px'; p.style.left = (horizontal ? i * dw : 0) + 'px'; p.style.top = (horizontal ? 0 : i * dh) + 'px'; });
-      fitVideo(video, dw, dh, sw, sh, a[2], a[3]); fitVideo(secondary, dw, dh, sw, sh, a[4], a[5]);
-      if (secondary.readyState >= 1 && Math.abs(secondary.currentTime - t) > (video.paused ? .018 : .13)) secondary.currentTime = t;
-      if (video.paused && !secondary.paused) secondary.pause(); else if (!video.paused && secondary.paused && secondary.readyState >= 2) secondary.play().catch(() => { });
-    } else { if (secondary.hasAttribute('src')) { secondary.pause(); secondary.removeAttribute('src'); secondary.load(); } pane2.style.display = 'none'; pane.style.width = ''; pane.style.height = ''; pane.style.left = ''; pane.style.top = ''; fitVideo(video, frameWidth, frameHeight, sw, sh, x, y, e.framing === 'fit'); }
+    if (secondary.hasAttribute('src')) { secondary.pause(); secondary.removeAttribute('src'); secondary.load(); }
+    pane2.style.display = 'none'; pane.style.width = ''; pane.style.height = ''; pane.style.left = ''; pane.style.top = '';
+    fitVideo(video, frameWidth, frameHeight, sw, sh, x, y, e.framing === 'fit');
     const u = Math.min(frameWidth, frameHeight) / 1080, cap = e.caption;
     let active = null; if (cap.enabled) {
       let low = 0, high = captionGroups.length; while (low < high) { const i = (low + high) >> 1; if (captionGroups[i][0].s <= t) low = i + 1; else high = i; }

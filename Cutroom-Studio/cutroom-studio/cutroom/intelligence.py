@@ -64,6 +64,67 @@ def transcribe(audio, duration, language, progress):
     return words, detected_lang
 
 
+def translate_transcript(words, target_lang, progress=None):
+    """
+    Translates word-level transcript to target_lang (e.g. 'en') while maintaining
+    strictly synchronized start and end timestamps.
+    """
+    if not words or not target_lang or target_lang in ('auto', 'all'):
+        return words
+    
+    import urllib.request, urllib.parse, json
+
+    def translate_phrase(text, tl):
+        if not text.strip(): return text
+        url = f'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={tl}&dt=t&q=' + urllib.parse.quote(text)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            res = json.loads(resp.read().decode('utf-8'))
+            return ''.join([p[0] for p in res[0]]).strip()
+
+    # Group words into sentence chunks
+    chunks = []
+    cur = []
+    for w in words:
+        cur.append(w)
+        if len(cur) >= 12 or (cur and cur[-1]['t'].endswith(('.', '!', '?', '।', '…', ':'))):
+            chunks.append(cur)
+            cur = []
+    if cur: chunks.append(cur)
+
+    translated_words = []
+    total = len(chunks)
+    for idx, orig_chunk in enumerate(chunks):
+        phrase = ' '.join(w['t'] for w in orig_chunk)
+        try:
+            trans_text = translate_phrase(phrase, target_lang)
+        except Exception:
+            trans_text = phrase
+        
+        c_start = orig_chunk[0]['s']
+        c_end = orig_chunk[-1]['e']
+        c_dur = max(0.05, c_end - c_start)
+        t_words = trans_text.split()
+        if not t_words:
+            t_words = [w['t'] for w in orig_chunk]
+        w_dur = c_dur / len(t_words)
+        for w_idx, tw in enumerate(t_words):
+            ws = round(c_start + w_idx * w_dur, 3)
+            we = round(min(c_end, ws + w_dur), 3)
+            translated_words.append(dict(
+                i=len(translated_words),
+                s=ws,
+                e=we,
+                t=tw,
+                p=0.95,
+                speaker=orig_chunk[0].get('speaker')
+            ))
+        if progress and idx % 4 == 0:
+            progress(int((idx + 1) / total * 100))
+
+    return translated_words
+
+
 def read_pcm(audio):
     with wave.open(str(audio)) as f:
         return np.frombuffer(f.readframes(f.getnframes()), dtype='<i2').astype('float32')/32768.

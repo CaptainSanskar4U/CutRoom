@@ -46,6 +46,13 @@ def analyze_file(path, preview_path, progress, prefs, sample=False, heatmap=()):
             progress(20,'Transcribing speech')
             pcm=ai.read_pcm(audio)
             words,language=ai.transcribe(pcm,info['duration'],prefs['language'],progress)
+            target_sub = prefs.get('subtitle_language', 'auto')
+            if target_sub not in ('auto', 'all') and target_sub != language:
+                progress(56, f"Translating subtitles to {target_sub.upper()}...")
+                try:
+                    words = ai.translate_transcript(words, target_sub, lambda p: progress(56 + int(0.05 * p), f"Translating subtitles to {target_sub.upper()}"))
+                except Exception as e:
+                    LOG.warning('subtitle_translation_failed err=%s', e)
             wave=ai.wave_summary(pcm)
             progress(58,'Grouping speaker voices'); speakers=ai.voices(words,pcm)
             del pcm
@@ -105,13 +112,20 @@ def analysis_job(job,project,report):
     if project.get('source_url'):
         report(2, 'Extracting audience heatmap & platform telemetry...')
         try:
-            telemetry = media.extract_platform_telemetry(project['source_url'])
+            telemetry = media.extract_platform_telemetry(project['source_url'], target_lang=prefs.get('subtitle_language'))
         except Exception as e:
             LOG.warning('telemetry_extraction_failed err=%s', e)
             telemetry = None
 
         if telemetry and telemetry.get('has_native_subs'):
             report(8, f"Found {len(telemetry['words'])} words & {len(telemetry['heatmap'])} replay peaks instantly!")
+            target_sub = prefs.get('subtitle_language', 'auto')
+            if target_sub not in ('auto', 'all') and target_sub != telemetry.get('lang'):
+                report(10, f"Translating subtitles to {target_sub.upper()}...")
+                try:
+                    telemetry['words'] = ai.translate_transcript(telemetry['words'], target_sub, lambda p: report(10 + int(0.08 * p), f"Translating subtitles to {target_sub.upper()}"))
+                except Exception as e:
+                    LOG.warning('telemetry_subtitle_translation_failed err=%s', e)
             if not preview_path.is_file() or preview_path.stat().st_size < 10000:
                 report(12, 'Streaming fast 480p proxy for active speaker tracking...')
                 try:

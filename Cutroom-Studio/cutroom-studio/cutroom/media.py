@@ -204,8 +204,8 @@ def parse_subtitles_to_words(raw_bytes, ext):
         except Exception: pass
     return words
 
-def extract_platform_telemetry(url):
-    """Bulletproof Native Subtitle & Telemetry Snatcher: bypasses YouTube 429 translation blocks."""
+def extract_platform_telemetry(url, target_lang=None):
+    """Bulletproof Native Subtitle & Telemetry Snatcher: respects target_lang and bypasses YouTube 429 translation blocks."""
     import yt_dlp, urllib.request
     opts = {
         'quiet': True,
@@ -224,11 +224,15 @@ def extract_platform_telemetry(url):
         if info.get('automatic_captions'): subs.update(info['automatic_captions'])
         if info.get('subtitles'): subs.update(info['subtitles'])
         subs.pop('live_chat', None)
-        # Prioritize original spoken tracks first (-orig), then language-specific, then any
+        
         orig_keys = [k for k in subs.keys() if k.endswith('-orig')]
-        priority_keys = orig_keys + ['hi-orig', 'en-orig', 'es-orig', 'hi', 'en', 'es', 'pt', 'id'] + list(subs.keys())
+        priority_keys = []
+        if target_lang and target_lang not in ('auto', 'all'):
+            priority_keys.extend([target_lang, f'{target_lang}-orig'])
+        priority_keys.extend(orig_keys + ['hi-orig', 'en-orig', 'es-orig', 'hi', 'en', 'es', 'pt', 'id'] + list(subs.keys()))
         
         words = []
+        detected_lang = 'en'
         for lk in priority_keys:
             if lk in subs and subs[lk]:
                 fmt = next((s for s in subs[lk] if s.get('ext') == 'json3'), None) or \
@@ -243,8 +247,10 @@ def extract_platform_telemetry(url):
                         req = urllib.request.Request(fmt['url'], headers=headers)
                         with urllib.request.urlopen(req, timeout=6) as resp:
                             raw = resp.read()
-                            words = parse_subtitles_to_words(raw, fmt.get('ext', 'json3'))
-                            if words:
+                            parsed = parse_subtitles_to_words(raw, fmt.get('ext', 'json3'))
+                            if parsed:
+                                words = parsed
+                                detected_lang = lk.replace('-orig', '')
                                 break
                     except Exception:
                         continue
@@ -256,6 +262,7 @@ def extract_platform_telemetry(url):
             'heatmap': heatmap,
             'words': words,
             'has_native_subs': bool(words),
+            'lang': detected_lang,
             'info': info
         }
 
