@@ -2,12 +2,26 @@ import { ico, $, $$, esc, clone, clamp, time, option, btn, iconBtn, ratios, capN
 
 const FONT = ['DejaVu Sans', 'Liberation Sans', 'Liberation Serif', 'DejaVu Sans Mono', 'Noto Sans'];
 const FILLERS = new Set(['um', 'uh', 'erm', 'umm', 'uhh', 'ah', 'hmm', 'er']);
-const FRAMES = { track: 'Auto track (Smart)', dualfocal: 'Dual-Focal stack', manual: 'Manual crop', fit: 'Fit to canvas', split: 'Dual crop' };
+const FRAMES = { track: 'Auto track (Smart)', dualfocal: 'Viral Director (Multicam Switcher)', manual: 'Manual crop', fit: 'Fit to canvas', split: 'Dual crop (50/50 Split)' };
 const TABS = [['captions', 'captions', 'Captions'], ['frame', 'crop', 'Framing'], ['layers', 'layers', 'Layers'], ['audio', 'audio', 'Audio']];
 function atTrack(track, t) {
   if (!track.length) return [.5, .5, .30, .50, .70, .50]; let low = 0, hi = track.length; while (low < hi) { let m = (low + hi) >> 1; if (track[m].t <= t) low = m + 1; else hi = m; }
   const a = track[Math.max(0, low - 1)], b = track[Math.min(track.length - 1, low)], k = a === b || b.cut ? 0 : clamp((t - a.t) / Math.max(.001, b.t - a.t));
   const vector = q => [q.x, q.y, ...(q.p?.[0] || [.3, q.y]), ...(q.p?.[1] || [.7, q.y])]; const B = vector(b); return vector(a).map((x, i) => x + (B[i] - x) * k);
+}
+function directorCrop(track, t, start) {
+  const a = atTrack(track, t);
+  const rel = Math.max(0, t - start);
+  const hasDemo = Math.abs(a[4] - a[2]) > 0.08 || Math.abs(a[4] - a[0]) > 0.08;
+  if (rel < 2.5) {
+    return [a[0], a[1]];
+  }
+  const cycle = Math.floor((rel - 2.5) / 3.0);
+  if (cycle % 2 === 1) {
+    if (hasDemo) return [a[4], a[5]];
+    return [a[0], Math.max(0.18, a[1] - 0.045)];
+  }
+  return [a[0], a[1]];
 }
 function merged(cuts, start, end) { let cursor = start; const out = []; for (const q of [...cuts].sort((a, b) => a.s - b.s)) { const s = Math.max(start, q.s), e = Math.min(end, q.e); if (e <= s || e <= cursor) continue; if (s > cursor + .02) out.push([cursor, s]); cursor = Math.max(cursor, e); } if (end > cursor + .02) out.push([cursor, end]); return out; }
 function groups(words, n) { let out = [], cur = []; for (const w of words) { if (cur.length && (cur.length >= n || w.s - cur.at(-1).e > .42 || w.s - cur[0].s > 2.35 || (cur.length > 1 && /[.!?。！？]["”']?$/.test(cur.at(-1).t)))) { out.push(cur); cur = []; } cur.push(w); } if (cur.length) out.push(cur); return out; }
@@ -83,7 +97,7 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   <div class="grid2">${formField('Size', 'caption.size', e, 'number', 'min="20" max="110"')}${formField('Words per group', 'caption.words', e, 'number', 'min="1" max="8"')}${formField('Text', 'caption.color', e, 'color')}${formField('Highlight', 'caption.highlight', e, 'color')}${formField('Outline color', 'caption.outline_color', e, 'color')}${formField('Outline', 'caption.outline', e, 'number', 'min="0" max="12"')}${formField('Shadow', 'caption.shadow', e, 'number', 'min="0" max="12"')}${formField('Offset (sec)', 'caption.offset', e, 'number', 'min="-10" max="10" step=".05"')}</div>
   ${check('Caption background', 'cap-bg', !!c.background)}${c.background ? formField('Background color', 'caption.background', e, 'color') : ''}${formField('Vertical position', 'caption.position', e, 'range', 'min=".08" max=".93" step=".01"')}${selection('Highlight animation', 'caption.motion', [['pop', 'Pop'], ['word', 'Word highlight'], ['none', 'None']], c.motion)}${check('Uppercase', 'caption.uppercase', c.uppercase)}`;
     if (tab === 'frame') inspector.innerHTML = `<h4>Output aspect ratio</h4><div class="ratio-row">${ratioButtons()}</div>${selection('Layout', 'framing', Object.entries(FRAMES), e.framing)}
-  ${e.framing === 'manual' ? `${formField('Horizontal crop position', 'crop_x', e, 'range', 'min="0" max="1" step=".01"')}${formField('Vertical crop position', 'crop_y', e, 'range', 'min="0" max="1" step=".01"')}` : e.framing === 'dualfocal' ? '<p class="control-note">Dual-Focal Context Director: Dynamically stacks speaker on top and active background demonstration on bottom.</p>' : e.framing === 'track' ? `<p class="control-note">${analysis.info.face_frames ? 'Follows detected faces with smart context awareness. Adjusts dynamically to keep both speaker and demonstration in frame.' : 'No faces detected. Cutroom follows visible motion when possible.'}</p>` : e.framing === 'split' ? '<p class="control-note">Keeps two detected faces in separate crops. When only one face is visible, the panes use left and right crops.</p>' : ''}
+  ${e.framing === 'manual' ? `${formField('Horizontal crop position', 'crop_x', e, 'range', 'min="0" max="1" step=".01"')}${formField('Vertical crop position', 'crop_y', e, 'range', 'min="0" max="1" step=".01"')}` : e.framing === 'dualfocal' ? '<p class="control-note">Viral Director: Automatically switches angles every 3s between Speaker portrait, close-up punch-in, and full-screen demonstration.</p>' : e.framing === 'track' ? `<p class="control-note">${analysis.info.face_frames ? 'Follows detected faces with smart context awareness. Adjusts dynamically to keep both speaker and demonstration in frame.' : 'No faces detected. Cutroom follows visible motion when possible.'}</p>` : e.framing === 'split' ? '<p class="control-note">Keeps two detected faces in separate crops. When only one face is visible, the panes use left and right crops.</p>' : ''}
   ${formField('Canvas background (Fit)', 'background', e, 'color')}${check('Cutroom watermark', 'watermark', e.watermark)}${selection('Fade in and out', 'fade', [[0, 'None'], [.25, '0.25 sec'], [.5, '0.5 sec'], [1, '1 sec'], [2, '2 sec']], e.fade)}
   ${brands.length ? selection('Apply saved brand kit', 'brand', [['', 'Choose a kit…'], ...brands.map(b => [b.id, b.name])], '') : ''}`;
     if (tab === 'layers') inspector.innerHTML = `<h4>Text and image layers</h4><div class="actions">${btn('Add text', 'text', { attrs: de('new-text') })}${btn('Add image', 'image', { attrs: de('new-image') })}</div>
@@ -138,13 +152,19 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
     el.style.transform = `translate(${left.toFixed(2)}px,${top.toFixed(2)}px)`;
   }
   function compose() {
-    const e = draft.edit, a = atTrack(analysis.track, t), [x, y] = e.framing === 'manual' ? [e.crop_x, e.crop_y] : [a[0], a[1]];
+    const e = draft.edit, a = atTrack(analysis.track, t);
+    let [x, y] = [a[0], a[1]];
+    if (e.framing === 'manual') {
+      [x, y] = [e.crop_x, e.crop_y];
+    } else if (e.framing === 'dualfocal' || e.framing === 'context') {
+      [x, y] = directorCrop(analysis.track, t, draft.start_at);
+    }
     const [w, h] = e.ratio.split(':').map(Number), box = stage.getBoundingClientRect(), r = w / h;
     const boundW = box.width - 23, boundH = box.height - 18;
     frameWidth = Math.max(40, Math.min(boundW, boundH * r)); frameHeight = frameWidth / r;
     frame.style.width = frameWidth + 'px'; frame.style.height = frameHeight + 'px'; frame.style.background = e.background;
     const sw = video.videoWidth || project.info.width, sh = video.videoHeight || project.info.height;
-    if (e.framing === 'split' || e.framing === 'dualfocal' || e.framing === 'context') {
+    if (e.framing === 'split') {
       if (!secondary.hasAttribute('src')) { secondary.preload = 'auto'; secondary.src = project.preview; }
       pane2.style.display = 'block'; const horizontal = r > 1.2; const dw = horizontal ? frameWidth / 2 : frameWidth, dh = horizontal ? frameHeight : frameHeight / 2;
       [pane, pane2].forEach((p, i) => { p.style.width = dw + 'px'; p.style.height = dh + 'px'; p.style.left = (horizontal ? i * dw : 0) + 'px'; p.style.top = (horizontal ? 0 : i * dh) + 'px'; });

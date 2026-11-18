@@ -235,6 +235,58 @@ def keyframes(track,start,end):
     return [[round(t-start,4),*points_at(track,t)] for t in sorted(set(times))]
 
 
+def multicam_keyframes(track, start, end):
+    """
+    Viral Multicam Director:
+    Calculates intelligent, rhythmic camera angle switches between:
+      - Angle 1 (Speaker Portrait / Opening Hook)
+      - Angle 2 (Full-Screen Demonstration / Salient Background Action)
+      - Angle 3 (High-Energy Punch-In on Speaker for emphasis)
+    Renders 100% full-screen 9:16 cuts without splitting or duplicating the video.
+    """
+    times = []
+    step = 0.25
+    t = start
+    while t <= end:
+        times.append(t)
+        t += step
+    times.append(end)
+
+    # Rhythmic switching: Hook (0 - 2.5s), then switch every 3.0s
+    switch_times = []
+    sw = start + 2.5
+    while sw < end - 0.8:
+        switch_times.append(sw)
+        sw += 3.0
+
+    for sw in switch_times:
+        times.extend([sw - 0.015, sw])
+    times = sorted(set(times))
+
+    keys = []
+    for t_pt in times:
+        rel = max(0.0, t_pt - start)
+        a = points_at(track, t_pt)
+        # a is [speaker_x, speaker_y, p0_x, p0_y, p1_x, p1_y]
+        has_demo = abs(a[4] - a[2]) > 0.08 or abs(a[4] - a[0]) > 0.08
+        if rel < 2.5:
+            # Hook phase: focus on speaker
+            tx, ty = a[0], a[1]
+        else:
+            cycle = int((rel - 2.5) / 3.0)
+            if cycle % 2 == 1:
+                # Reveal / Action phase: Cut to Demo if present, otherwise punch-in close-up
+                if has_demo:
+                    tx, ty = a[4], a[5]
+                else:
+                    tx, ty = a[0], max(0.18, a[1] - 0.045)
+            else:
+                # Reaction / Speaker phase: Cut back to Speaker portrait
+                tx, ty = a[0], a[1]
+        keys.append([round(rel, 4), tx, ty, a[2], a[3], a[4], a[5]])
+    return keys
+
+
 def cv_expression(keys,axis):
     def emit(a,b):
         if b-a==1:
@@ -522,13 +574,18 @@ def render(source,dest,meta,analysis,clip,options,assets,progress,depth=0):
                 f'[fgsrc]scale={ow}:{oh}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];'
                 f'[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[frame]'
             )
-        elif framing in ('split', 'dualfocal', 'context'):
+        elif framing == 'split':
             horizontal=ow/oh>1.20; subw,subh=(ow//2,oh) if horizontal else (ow,oh//2)
             filters.append(f'{base},split=2[vleft][vright]')
             for n,p in enumerate(('left','right')):
                 f=crop_filter(w,h,subw,subh,cv_expression(keys,3+n*2),cv_expression(keys,4+n*2))
                 filters.append(f'[v{p}]{f}[side{n}]')
             filters.append('[side0][side1]'+('hstack' if horizontal else 'vstack')+'=inputs=2[frame]')
+        elif framing in ('dualfocal', 'context'):
+            director_keys = multicam_keyframes(track, start, end)
+            x = cv_expression(director_keys, 1)
+            y = cv_expression(director_keys, 2)
+            filters.append(f'{base},{crop_filter(w,h,ow,oh,x,y)}[frame]')
         else:
             x,y=(str(edit['crop_x']),str(edit['crop_y'])) if framing=='manual' else (cv_expression(keys,1),cv_expression(keys,2))
             filters.append(f'{base},{crop_filter(w,h,ow,oh,x,y)}[frame]')
