@@ -24,7 +24,7 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   const fontsLoaded = new Set();
   const assetsLocal = [...assets];
   const full = Math.max(.6, Number(project.info.duration));
-  const isCenterFitRendered = () => draft.edit.framing === 'fit' && !!clip.video && (draft.edit.background_style || 'blur') === 'blur';
+  const isCenterFitRendered = () => (draft.edit.framing === 'fit' || draft.edit.framing === 'track') && !!clip.video;
   const clock = () => {
     const raw = Number.isFinite(video.currentTime) && ready ? video.currentTime : seekTo;
     return isCenterFitRendered() ? (draft.start_at + raw) : raw;
@@ -153,7 +153,7 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
     frameWidth = Math.max(40, Math.min(boundW, boundH * r)); frameHeight = frameWidth / r;
     frame.style.width = frameWidth + 'px'; frame.style.height = frameHeight + 'px';
     const bgStyle = e.background_style || 'blur';
-    const canUseRenderedVideo = e.framing === 'fit' && !!clip.video && bgStyle === 'blur';
+    const canUseRenderedVideo = (e.framing === 'fit' || e.framing === 'track') && !!clip.video;
     const targetSrc = canUseRenderedVideo ? clip.video : project.preview;
     if (video.getAttribute('data-src') !== targetSrc) {
       video.setAttribute('data-src', targetSrc);

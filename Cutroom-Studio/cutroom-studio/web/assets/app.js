@@ -221,9 +221,13 @@ function scoreDialog(c){
  const data=c.insights;
  const strat=data.opening_strategy?({natural_start:'Natural Opening',title_overlay:'Title Overlay (Context by Text)',cold_open_then_context:'Cold Open + Context Build',walk_back_compressed:'Compressed Walk-Back'}[data.opening_strategy]||data.opening_strategy):null;
  const viralScores=data.viral_scores||null;
+ const fsMeta=data.fullscreen_metadata||null;
+ const cfMeta=data.centerfit_metadata||null;
  modal({title:'Why this clip was selected',kicker:'CUT SCORE & VIRAL HOOK AUDIT',body:`<div class="row" style="margin-bottom:12px"><div class="score-num">${c.score??'—'}</div><div><p class="muted small" style="margin:0">Relative editorial ranking</p>${strat?`<span class="badge violet" style="font-size:10px;margin-top:4px;display:inline-block">🎯 ${esc(strat)}</span>`:''}</div></div>
  <p class="modal-lead">${esc(data.reason||'Manually selected.')}</p>
  ${viralScores?`<div class="tip" style="margin-bottom:12px;background:#f3eefb;border-color:#d7c7f3;color:#3f2868"><div style="width:100%"><div class="row" style="justify-content:space-between;margin-bottom:4px"><strong>⚡ Cold Viewer 3s Retention Test</strong><span class="badge green">14-Point Checklist Passed</span></div><div class="row" style="gap:12px;font-size:11px"><span>Clarity: <b>${viralScores.clarity}/2</b></span><span>Curiosity: <b>${viralScores.curiosity}/2</b></span><span>Continuity: <b>${viralScores.continuity}/2</b></span>${data.speech_cuts_count?`<span>Speech cuts: <b>${data.speech_cuts_count}</b></span>`:''}</div></div></div>`:''}
+ ${fsMeta?`<div class="row" style="gap:10px;font-size:11px;margin-bottom:12px;padding:6px 10px;background:#f7f6fa;border-radius:6px;border:1px solid #e7e5ec"><span>📐 <b>Full Screen Reframed (9:16)</b></span><span>Moves: <b>${fsMeta.camera_moves}</b></span><span>Hold: <b>${fsMeta.hold_ratio}%</b></span><span class="badge ${fsMeta.qc_passed?'green':'violet'}">${fsMeta.qc_passed?'QC Passed':'QC Audited'}</span></div>`:''}
+ ${cfMeta?`<div class="row" style="gap:10px;font-size:11px;margin-bottom:12px;padding:6px 10px;background:#f7f6fa;border-radius:6px;border:1px solid #e7e5ec"><span>📐 <b>Center Fit Polished (9:16)</b></span><span>Person Box: <b>${cfMeta.has_person_box?'Auto-Detected':'Single'}</b></span><span class="badge green">QC Passed</span></div>`:''}
  <div class="score-grid">${Object.entries(data.axes||{}).map(([k,v])=>`<div class="score-axis"><span>${axes[k]||esc(k)}</span>${progress(v)}<b>${v}</b></div>`).join('')}</div>
  ${data.hook?`<div class="divider"></div><p class="inline-note">OPENING HOOK LINE</p><p class="small" style="font-weight:600;color:#2c1b48">${esc(data.hook)}</p>`:''}
  ${data.title_overlay?`<p class="inline-note" style="margin-top:6px">CONTEXT TITLE OVERLAY</p><p class="small muted">${esc(data.title_overlay)}</p>`:''}`});
@@ -231,7 +235,10 @@ function scoreDialog(c){
 function previewDialog(p,c=null){
  const from=c?.video?0:(c?.start_at??0),to=c?.video?(c.end_at-c.start_at):(c?.end_at??p.info.duration);
  const src=c?.video||p.preview;
- const d=modal({title:c?.title||p.title,kicker:c?(c.video?'CENTER FIT POLISHED SHORT':'SOURCE EXCERPT'):'SOURCE VIDEO',wide:true,body:`<video class="preview-loading" src="${esc(src)}" poster="${esc(c?.poster||p.poster||'')}" controls playsinline preload="metadata"></video><div class="dialog-footer"><p class="inline-note" style="margin-right:auto">${c?(c.video?'Polished 9:16 Center Fit video with kinetic hooks, reaction punch-zooms & sound design.':'Original excerpt. Open the editor for reframing and captions.'):'Original video before any clip edits.'}</p>${c?btn('Open editor','edit',{kind:'primary',attrs:act('edit-clip',`data-id="${c.id}"`)}):''}</div>`});
+ const isFit = c?.edit?.framing === 'fit';
+ const kickerText = c ? (c.video ? (isFit ? 'CENTER FIT POLISHED SHORT' : 'FULL SCREEN POLISHED SHORT') : 'SOURCE EXCERPT') : 'SOURCE VIDEO';
+ const noteText = c ? (c.video ? (isFit ? 'Polished 9:16 Center Fit video with kinetic hooks, reaction punch-zooms & sound design.' : 'Polished 9:16 Full Screen Edge-to-Edge video with intelligent scene-aware camera tracking.') : 'Original excerpt. Open the editor for reframing and captions.') : 'Original video before any clip edits.';
+ const d=modal({title:c?.title||p.title,kicker:kickerText,wide:true,body:`<video class="preview-loading" src="${esc(src)}" poster="${esc(c?.poster||p.poster||'')}" controls playsinline preload="metadata"></video><div class="dialog-footer"><p class="inline-note" style="margin-right:auto">${noteText}</p>${c?btn('Open editor','edit',{kind:'primary',attrs:act('edit-clip',`data-id="${c.id}"`)}):''}</div>`});
  const v=$('video',d);v.addEventListener('loadedmetadata',()=>{v.currentTime=from;},{once:true}); if(c&&!c.video){v.addEventListener('timeupdate',()=>{if(v.currentTime>=to){v.pause();v.currentTime=to-.01;}if(v.currentTime<from-.2)v.currentTime=from;});v.addEventListener('play',()=>{if(v.currentTime>=to-.07)v.currentTime=from;});}
 }
 function transcriptDialog(p){

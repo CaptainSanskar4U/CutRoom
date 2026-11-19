@@ -183,12 +183,12 @@ def analysis_job(job,project,report):
 
             # Enhance & Polish stage (82% - 96%):
             is_centerfit = prefs.get('layout') == 'fit'
+            clips_tmp_dir = folder / 'temp_clips'
+            clips_tmp_dir.mkdir(parents=True, exist_ok=True)
+            src_to_use = preview_path if preview_path.is_file() and preview_path.stat().st_size > 1000 else source_path
             if is_centerfit:
                 report(82, 'Enhance & Polish: Executing CenterFitClip AI Editing Skill...')
                 from . import centerfit_skill
-                clips_tmp_dir = folder / 'temp_clips'
-                clips_tmp_dir.mkdir(parents=True, exist_ok=True)
-                src_to_use = preview_path if preview_path.is_file() and preview_path.stat().st_size > 1000 else source_path
                 for idx, cand in enumerate(candidates):
                     pct = 82 + int((idx + 1) / max(1, len(candidates)) * 12)
                     report(pct, f"Enhance & Polish: CenterFitClip rendering clip {idx+1}/{len(candidates)}...")
@@ -202,7 +202,19 @@ def analysis_job(job,project,report):
                     except Exception as e:
                         LOG.warning('centerfit_skill_execution_failed idx=%s err=%s', idx, e)
             else:
-                report(82, 'Enhance & Polish: Applying kinetic typography & motion styling...')
+                report(82, 'Enhance & Polish: Executing Full Screen Smart Reframing Skill...')
+                from . import fullscreen_skill
+                for idx, cand in enumerate(candidates):
+                    pct = 82 + int((idx + 1) / max(1, len(candidates)) * 12)
+                    report(pct, f"Enhance & Polish: Full Screen Reframing clip {idx+1}/{len(candidates)}...")
+                    out_clip = clips_tmp_dir / f"clip_{idx}.mp4"
+                    try:
+                        res = fullscreen_skill.execute_fullscreen_skill(src_to_use, cand, telemetry['words'], out_clip)
+                        cand['rendered_video'] = str(out_clip)
+                        cand['fullscreen_metadata'] = res
+                        cand['title'] = cand.get('title_overlay') or cand.get('title')
+                    except Exception as e:
+                        LOG.warning('fullscreen_skill_execution_failed idx=%s err=%s', idx, e)
             
             report(94, 'Enhance & Polish: Generating hook cards & B-roll insights...')
             poster_at = min(data['info']['duration'] - .04, data['candidates'][0]['s'] + 1.2)
@@ -269,12 +281,12 @@ def analysis_job(job,project,report):
     
     # Enhance & Polish stage for local upload / fallback (82% - 96%):
     is_centerfit = prefs.get('layout') == 'fit'
+    clips_tmp_dir = folder / 'temp_clips'
+    clips_tmp_dir.mkdir(parents=True, exist_ok=True)
+    src_to_use = preview_path if preview_path.is_file() and preview_path.stat().st_size > 1000 else path
     if is_centerfit:
         report(82, 'Enhance & Polish: Executing CenterFitClip AI Editing Skill...')
         from . import centerfit_skill
-        clips_tmp_dir = folder / 'temp_clips'
-        clips_tmp_dir.mkdir(parents=True, exist_ok=True)
-        src_to_use = preview_path if preview_path.is_file() and preview_path.stat().st_size > 1000 else path
         for idx, cand in enumerate(data['candidates']):
             pct = 82 + int((idx + 1) / max(1, len(data['candidates'])) * 12)
             report(pct, f"Enhance & Polish: CenterFitClip rendering clip {idx+1}/{len(data['candidates'])}...")
@@ -288,7 +300,19 @@ def analysis_job(job,project,report):
             except Exception as e:
                 LOG.warning('centerfit_skill_execution_failed idx=%s err=%s', idx, e)
     else:
-        report(82, 'Enhance & Polish: Applying kinetic typography & motion styling...')
+        report(82, 'Enhance & Polish: Executing Full Screen Smart Reframing Skill...')
+        from . import fullscreen_skill
+        for idx, cand in enumerate(data['candidates']):
+            pct = 82 + int((idx + 1) / max(1, len(data['candidates'])) * 12)
+            report(pct, f"Enhance & Polish: Full Screen Reframing clip {idx+1}/{len(data['candidates'])}...")
+            out_clip = clips_tmp_dir / f"clip_{idx}.mp4"
+            try:
+                res = fullscreen_skill.execute_fullscreen_skill(src_to_use, cand, data['words'], out_clip)
+                cand['rendered_video'] = str(out_clip)
+                cand['fullscreen_metadata'] = res
+                cand['title'] = cand.get('title_overlay') or cand.get('title')
+            except Exception as e:
+                LOG.warning('fullscreen_skill_execution_failed idx=%s err=%s', idx, e)
 
     report(96, 'Saving clips and preview')
     data['info']['bytes'] = path.stat().st_size
@@ -328,20 +352,21 @@ def render_job(job,project,report):
         assets={r['id']:dict(r)|{'details':load(r['details'])} for r in c.execute('SELECT * FROM assets WHERE user_id=?',(project['user_id'],)).fetchall()}
     report(2,'Building render graph')
     framing = clip.get('edit', {}).get('framing', 'track')
+    cand = {
+        's': clip['start_at'],
+        'e': clip['end_at'],
+        'title': clip['title'],
+        'hook': clip.get('insights', {}).get('hook', ''),
+        'background_style': clip.get('edit', {}).get('background_style', 'blur'),
+        'edit': clip.get('edit', {})
+    }
+    src_file = media.source_file(project)
+    if not src_file.is_file() or not src_file.stat().st_size:
+        src_file = media.preview_file(project)
+
     if framing == 'fit':
         report(10, 'Enhance & Polish: Executing CenterFitClip AI Editing Skill...')
         from . import centerfit_skill
-        cand = {
-            's': clip['start_at'],
-            'e': clip['end_at'],
-            'title': clip['title'],
-            'hook': clip.get('insights', {}).get('hook', ''),
-            'background_style': clip.get('edit', {}).get('background_style', 'blur'),
-            'edit': clip.get('edit', {})
-        }
-        src_file = media.source_file(project)
-        if not src_file.is_file() or not src_file.stat().st_size:
-            src_file = media.preview_file(project)
         centerfit_skill.execute_centerfit_skill(
             src_file,
             cand,
@@ -352,7 +377,17 @@ def render_job(job,project,report):
         info = video.inspect(dest / 'clip.mp4')
         result = {'width': info['width'], 'height': info['height'], 'duration': info['duration'], 'bytes': (dest / 'clip.mp4').stat().st_size}
     else:
-        result=video.render(media.source_file(project),dest/'clip.mp4',analysis['info'],analysis,clip,options,assets,lambda f:report(3+94*f,'Encoding MP4'))
+        report(10, 'Enhance & Polish: Executing Full Screen Smart Reframing Skill...')
+        from . import fullscreen_skill
+        fullscreen_skill.execute_fullscreen_skill(
+            src_file,
+            cand,
+            analysis.get('words', []),
+            dest / 'clip.mp4',
+            lambda p, msg: report(10 + int(p * 0.85), msg)
+        )
+        info = video.inspect(dest / 'clip.mp4')
+        result = {'width': info['width'], 'height': info['height'], 'duration': info['duration'], 'bytes': (dest / 'clip.mp4').stat().st_size}
     (dest/'captions.srt').write_text(video.srt(analysis['words'],clip['start_at'],clip['end_at'],clip['edit']),encoding='utf8')
     cloud_url = media.sync_to_supabase_storage(dest/'clip.mp4', f"exports/{job['id']}/clip.mp4")
     media.sync_to_supabase_storage(dest/'captions.srt', f"exports/{job['id']}/captions.srt")

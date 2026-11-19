@@ -546,22 +546,34 @@ def render(source,dest,meta,analysis,clip,options,assets,progress,depth=0):
     keep=kept_ranges(start,end,edit['cuts']); output_duration=sum(b-a for a,b in keep)
     if output_duration<.5: raise MediaError('Adjust your trims. At least half a second must remain.')
     framing=edit.get('framing', 'track')
+    dest_path = Path(dest)
+    insights = clip.get('insights', {})
+    if isinstance(insights, str):
+        try: insights = json.loads(insights)
+        except Exception: insights = {}
+    cand = {
+        's': start,
+        'e': end,
+        'title': clip.get('title', ''),
+        'hook': (insights or {}).get('hook', ''),
+        'background_style': edit.get('background_style', 'blur'),
+        'edit': edit
+    }
+
     if framing == 'fit':
         from . import centerfit_skill
-        insights = clip.get('insights', {})
-        if isinstance(insights, str):
-            try: insights = json.loads(insights)
-            except Exception: insights = {}
-        cand = {
-            's': start,
-            'e': end,
-            'title': clip.get('title', ''),
-            'hook': (insights or {}).get('hook', ''),
-            'background_style': edit.get('background_style', 'blur'),
-            'edit': edit
-        }
-        dest_path = Path(dest)
         centerfit_skill.execute_centerfit_skill(
+            Path(source),
+            cand,
+            analysis.get('words', []),
+            dest_path,
+            lambda p, msg: progress(p / 100.0) if progress else None
+        )
+        dest_info = inspect(dest_path)
+        return {'width': dest_info['width'], 'height': dest_info['height'], 'duration': dest_info['duration'], 'bytes': dest_path.stat().st_size}
+    elif framing in ('track', 'full') and edit.get('ratio') == '9:16':
+        from . import fullscreen_skill
+        fullscreen_skill.execute_fullscreen_skill(
             Path(source),
             cand,
             analysis.get('words', []),
