@@ -181,6 +181,7 @@ def analysis_job(job,project,report):
                     pct = 82 + int((idx + 1) / max(1, len(candidates)) * 12)
                     report(pct, f"Enhance & Polish: CenterFitClip rendering clip {idx+1}/{len(candidates)}...")
                     out_clip = clips_tmp_dir / f"clip_{idx}.mp4"
+                    cand['background_style'] = prefs.get('background_style', 'blur')
                     try:
                         res = centerfit_skill.execute_centerfit_skill(src_to_use, cand, telemetry['words'], out_clip)
                         cand['rendered_video'] = str(out_clip)
@@ -266,6 +267,7 @@ def analysis_job(job,project,report):
             pct = 82 + int((idx + 1) / max(1, len(data['candidates'])) * 12)
             report(pct, f"Enhance & Polish: CenterFitClip rendering clip {idx+1}/{len(data['candidates'])}...")
             out_clip = clips_tmp_dir / f"clip_{idx}.mp4"
+            cand['background_style'] = prefs.get('background_style', 'blur')
             try:
                 res = centerfit_skill.execute_centerfit_skill(src_to_use, cand, data['words'], out_clip)
                 cand['rendered_video'] = str(out_clip)
@@ -317,7 +319,14 @@ def render_job(job,project,report):
     if framing == 'fit':
         report(10, 'Enhance & Polish: Executing CenterFitClip AI Editing Skill...')
         from . import centerfit_skill
-        cand = {'s': clip['start_at'], 'e': clip['end_at'], 'title': clip['title'], 'hook': clip.get('insights', {}).get('hook', '')}
+        cand = {
+            's': clip['start_at'],
+            'e': clip['end_at'],
+            'title': clip['title'],
+            'hook': clip.get('insights', {}).get('hook', ''),
+            'background_style': clip.get('edit', {}).get('background_style', 'blur'),
+            'edit': clip.get('edit', {})
+        }
         src_file = media.source_file(project)
         if not src_file.is_file() or not src_file.stat().st_size:
             src_file = media.preview_file(project)

@@ -79,6 +79,28 @@ def render_final_clip(
         else:
             filter_complex += "[v]"
 
+    elif crop_mode in ("fit_black", "black"):
+        filter_complex = (
+            f"color=c=black:s={out_w}x{out_h}:d={clip_duration}[bg];"
+            f"[0:v]scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2"
+        )
+        if ass_file and os.path.exists(ass_path):
+            filter_complex += f",ass={ass_file}[v]"
+        else:
+            filter_complex += "[v]"
+
+    elif crop_mode in ("fit_white", "white"):
+        filter_complex = (
+            f"color=c=white:s={out_w}x{out_h}:d={clip_duration}[bg];"
+            f"[0:v]scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2"
+        )
+        if ass_file and os.path.exists(ass_path):
+            filter_complex += f",ass={ass_file}[v]"
+        else:
+            filter_complex += "[v]"
+
     elif crop_mode == "split_screen":
         # Dual speaker split-screen: Speaker 1 on top, Speaker 2 on bottom
         half_h = out_h // 2

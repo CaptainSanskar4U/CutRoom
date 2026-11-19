@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--intensity", choices=["balanced", "clean"], default="balanced")
     ap.add_argument("--no-sfx", action="store_true")
     ap.add_argument("--size", choices=["auto", "720", "1080"], default="auto")
+    ap.add_argument("--bg-style", choices=["blur", "black", "white"], default="blur")
     a = ap.parse_args()
 
     an = json.load(open(a.analysis)); src = an["source"]; rc = an["content_rect"]
@@ -80,8 +81,15 @@ def main():
                 f"borderw={S(bw_)}:bordercolor=black:x={x}:y={y}:enable='{enable}'{extra}")
 
     f = []
-    f.append("[0:v]fps=30,split=" + ("3[a][b][c]" if has_box else "2[a][b]"))
-    f.append(f"[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},gblur=sigma={S(30)},eq=brightness=-0.25:saturation=1.6[bg]")
+    if a.bg_style == "black":
+        f.append(f"color=c=black:s={W}x{H}:d={dur}[bg]")
+        f.append("[0:v]fps=30,split=" + ("2[b][c]" if has_box else "1[b]"))
+    elif a.bg_style == "white":
+        f.append(f"color=c=white:s={W}x{H}:d={dur}[bg]")
+        f.append("[0:v]fps=30,split=" + ("2[b][c]" if has_box else "1[b]"))
+    else:
+        f.append("[0:v]fps=30,split=" + ("3[a][b][c]" if has_box else "2[a][b]"))
+        f.append(f"[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},gblur=sigma={S(30)},eq=brightness=-0.25:saturation=1.6[bg]")
     f.append(f"[b]crop={rc['w']}:{rc['h']}:{rc['x']}:{rc['y']},scale={tw}:{th}:flags=lanczos,"
              f"zoompan=z='{Zg}':x='iw/2-(iw/zoom/2)':y='ih-ih/zoom':d=1:s={tw}x{th}:fps=30,"
              f"eq=contrast=1.15:saturation=1.35:gamma=0.96,unsharp=5:5:1.0[g]")
@@ -100,7 +108,12 @@ def main():
                  f"y='(in_h-out_h)/2+({A})*0.6*cos(t*83)'[v4]")
     else:
         f.append("[v3]null[v4]")
-    fx = f"rgbashift=rh={-S(14)}:bh={S(14)}:rv={S(4)}:bv={-S(4)}:enable='{glitch}',noise=alls=4:allf=t,vignette=PI/6" if bal else "vignette=PI/8"
+    if a.bg_style == "white":
+        fx = f"rgbashift=rh={-S(14)}:bh={S(14)}:rv={S(4)}:bv={-S(4)}:enable='{glitch}'" if bal else "null"
+    elif bal:
+        fx = f"rgbashift=rh={-S(14)}:bh={S(14)}:rv={S(4)}:bv={-S(4)}:enable='{glitch}',noise=alls=4:allf=t,vignette=PI/6"
+    else:
+        fx = "vignette=PI/8"
     f.append(f"[v4]{fx}[v5]")
 
     T = []

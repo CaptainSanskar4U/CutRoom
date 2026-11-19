@@ -406,9 +406,9 @@ def manual_clip(id:schema.Id,me=Depends(require)):
         p=own(c,id,me['id'],True)
         if p['status']!='ready': err(409,'Wait for analysis to finish.')
         if c.execute('SELECT COUNT(*) AS n FROM clips WHERE project_id=?',(id,)).fetchone()['n']>=65: err(409,'This project has reached its clip limit.')
-        end=min(30,load(p['info'])['duration']); clip=uid(); ratio=load(p['prefs'])['ratio']
+        end=min(30,load(p['info'])['duration']); clip=uid(); project_prefs=load(p['prefs'])
         c.execute('INSERT INTO clips (id,project_id,title,start_at,end_at,insights,edit,created) VALUES(?,?,?,?,?,?,?,?)',
-                (clip,id,'Manual clip',0,end,dump({'reason':'Manually selected'}),dump(schema.initial_edit(ratio)),NOW()))
+                (clip,id,'Manual clip',0,end,dump({'reason':'Manually selected'}),dump(schema.initial_edit(project_prefs)),NOW()))
         return clip_json(own_clip(c,clip,me['id']))
 
 @app.get('/api/projects/{id}/analysis')

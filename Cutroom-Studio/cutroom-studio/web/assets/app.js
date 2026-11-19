@@ -1,4 +1,4 @@
-import {ico,$,$$,esc,clone,clamp,time,date,size,option,btn,iconBtn,blank,spinner,go,ratios,languages,durationChoices,durationLabel,capNames,layoutChoices,subtitleLanguages,api,sendAsset,chunk,modal,closeModal,toast,formError,action,copy,progress} from './ui.js';
+import {ico,$,$$,esc,clone,clamp,time,date,size,option,btn,iconBtn,blank,spinner,go,ratios,languages,durationChoices,durationLabel,capNames,layoutChoices,backgroundStyles,subtitleLanguages,api,sendAsset,chunk,modal,closeModal,toast,formError,action,copy,progress} from './ui.js';
 import {openEditor} from './editor.js';
 
 const view=$('#view'),sidebar=$('#sidebar'),top=$('#topbar');
@@ -14,6 +14,7 @@ const minute=x=>x<60?(x>0?'<1':'0'):String(Math.floor(x/60));
 const ratiosOpts=r=>ratios.map(x=>option(x,x,r)).join('');
 const langOpts=l=>Object.entries(languages).map(([k,v])=>option(k,v,l)).join('');
 const layoutOpts=l=>Object.entries(layoutChoices).map(([k,v])=>option(k,v,l)).join('');
+const bgStyleOpts=b=>Object.entries(backgroundStyles).map(([k,v])=>option(k,v,b)).join('');
 const subLangOpts=l=>Object.entries(subtitleLanguages).map(([k,v])=>option(k,v,l)).join('');
 const capOpts=p=>Object.entries(capNames).map(([k,v])=>option(k,v,p)).join('');
 let lastUiKey='', editorRouteBack='';
@@ -98,8 +99,10 @@ function profile(){
 }
 function prefsFields(prefs={}){
  const counts=[1,2,3,4,5,6,7,8,9,10];
+ const isFit = (prefs.layout||'track') === 'fit';
  return `<div class="grid2">
-   <label class="field">Video Layout<select name="layout">${layoutOpts(prefs.layout||'track')}</select></label>
+   <label class="field">Video Layout<select name="layout" id="pref-layout-select">${layoutOpts(prefs.layout||'track')}</select></label>
+   <label class="field" id="pref-bg-style-field" style="${isFit?'':'display:none;'}">Background Style<select name="background_style">${bgStyleOpts(prefs.background_style||'blur')}</select></label>
    <label class="field">Aspect ratio<select name="ratio">${ratiosOpts(prefs.ratio||state.me?.preferred?.ratio||'9:16')}</select></label>
    <label class="field">Subtitle Language<select name="subtitle_language">${subLangOpts(prefs.subtitle_language||'auto')}</select></label>
    <label class="field">Spoken language<select name="language">${langOpts(prefs.language||state.me?.preferred?.language||'auto')}</select></label>
@@ -126,6 +129,7 @@ function readPrefs(f){
    length:data.get('length')||'auto',
    ratio:data.get('ratio')||'9:16',
    layout:data.get('layout')||'track',
+   background_style:data.get('background_style')||'blur',
    language:data.get('language')||'auto',
    subtitle_language:data.get('subtitle_language')||'auto',
    preset:data.get('preset')||'pulse',
@@ -145,6 +149,8 @@ function newProject({url='',file=null,resume=null}={}){
  function setFile(v){selected=v;drop.hidden=!!v;summary.hidden=!v;if(v)summary.innerHTML=`<div class="row">${ico('film',18)}<div><b>${esc(v.name)}</b><br><small class="muted">${size(v.size)} · video file</small></div></div>${iconBtn('Remove selected file','x','id="remove-file"')}`;if(v)$('#remove-file',summary).onclick=()=>{fi.value='';setFile(null);};formError(f);}
  setFile(selected);drop.onclick=()=>fi.click();fi.onchange=()=>setFile(fi.files[0]);drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag');};drop.ondragleave=()=>drop.classList.remove('drag');drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');if(e.dataTransfer.files.length)setFile(e.dataTransfer.files[0]);};
  $$('[data-mode]',d).forEach(b=>b.onclick=()=>{mode=b.dataset.mode;$$('[data-mode]',d).forEach(el=>el.classList.toggle('selected',el===b));$('#file-mode',d).hidden=mode!=='file';$('#url-mode',d).hidden=mode!=='url';$('#source-url',d).disabled=mode!=='url';formError(f);});
+ const layoutSel=$('#pref-layout-select',d),bgField=$('#pref-bg-style-field',d);
+ if(layoutSel&&bgField){layoutSel.onchange=()=>{bgField.style.display=layoutSel.value==='fit'?'':'none';};}
  $$('.prompt-pill',d).forEach(b=>b.onclick=()=>{const inp=$('#focus-input',d);if(inp){const val=inp.value.trim();inp.value=val?`${val}, ${b.dataset.pill}`:b.dataset.pill;inp.focus();}});
  f.onsubmit=e=>{e.preventDefault();formError(f);action($('button[type=submit]',f),async()=>{try{
   const useFile=mode==='file',url=useFile?null:$('#source-url',d).value.trim(),prefs=readPrefs(f);

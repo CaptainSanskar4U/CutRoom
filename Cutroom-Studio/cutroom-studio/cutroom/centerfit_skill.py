@@ -84,14 +84,15 @@ def build_captions_json(words: list, start_at: float, end_at: float, out_path: P
         rel_s = max(0.0, round(cur[0]["s"] - start_at, 2))
         rel_e = max(rel_s + 0.1, round(cur[-1]["e"] - start_at, 2))
         dur = rel_e - rel_s
-        text = " ".join(x["t"] for x in cur)
-        if len(cur) >= 4 or dur >= 1.8 or w["t"].endswith((".", "!", "?", "।", "…", ",")):
+        text = " ".join(x.get("t") or x.get("w", "") for x in cur)
+        w_text = w.get("t") or w.get("w", "")
+        if len(cur) >= 4 or dur >= 1.8 or w_text.endswith((".", "!", "?", "।", "…", ",")):
             cues.append(dict(start=rel_s, end=rel_e, text=text))
             cur = []
     if cur:
         rel_s = max(0.0, round(cur[0]["s"] - start_at, 2))
         rel_e = max(rel_s + 0.1, round(cur[-1]["e"] - start_at, 2))
-        cues.append(dict(start=rel_s, end=rel_e, text=" ".join(x["t"] for x in cur)))
+        cues.append(dict(start=rel_s, end=rel_e, text=" ".join(x.get("t") or x.get("w", "") for x in cur)))
 
     out_path.write_text(json.dumps(cues, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -170,6 +171,9 @@ def execute_centerfit_skill(
 
         # 4. Step 4: Render
         if progress_cb: progress_cb(60, "CenterFitClip: Rendering 9:16 layout, punch-zooms & sound design...")
+        bg_style = cand.get("background_style") or cand.get("edit", {}).get("background_style", "blur")
+        if bg_style not in ("blur", "black", "white"):
+            bg_style = "blur"
         render_cmd = [
             sys.executable, str(render_py),
             str(clip_in), str(analysis_json),
@@ -177,6 +181,7 @@ def execute_centerfit_skill(
             "--hook2", hook2,
             "--captions", str(captions_json),
             "--reactions", str(reactions_json),
+            "--bg-style", bg_style,
             "--out", str(rendered_mp4),
         ]
         if teaser_mid:

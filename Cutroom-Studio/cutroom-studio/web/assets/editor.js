@@ -1,4 +1,4 @@
-import { ico, $, $$, esc, clone, clamp, time, option, btn, iconBtn, ratios, capNames, api, sendAsset, modal, closeModal, toast, formError, action, copy } from './ui.js';
+import { ico, $, $$, esc, clone, clamp, time, option, btn, iconBtn, ratios, capNames, backgroundStyles, api, sendAsset, modal, closeModal, toast, formError, action, copy } from './ui.js';
 
 const FONT = ['DejaVu Sans', 'Liberation Sans', 'Liberation Serif', 'DejaVu Sans Mono', 'Noto Sans'];
 const FILLERS = new Set(['um', 'uh', 'erm', 'umm', 'uhh', 'ah', 'hmm', 'er']);
@@ -24,7 +24,7 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   const fontsLoaded = new Set();
   const assetsLocal = [...assets];
   const full = Math.max(.6, Number(project.info.duration));
-  const isCenterFitRendered = () => draft.edit.framing === 'fit' && !!clip.video;
+  const isCenterFitRendered = () => draft.edit.framing === 'fit' && !!clip.video && (draft.edit.background_style || 'blur') === 'blur';
   const clock = () => {
     const raw = Number.isFinite(video.currentTime) && ready ? video.currentTime : seekTo;
     return isCenterFitRendered() ? (draft.start_at + raw) : raw;
@@ -87,7 +87,8 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   <div class="grid2">${formField('Size', 'caption.size', e, 'number', 'min="20" max="110"')}${formField('Words per group', 'caption.words', e, 'number', 'min="1" max="8"')}${formField('Text', 'caption.color', e, 'color')}${formField('Highlight', 'caption.highlight', e, 'color')}${formField('Outline color', 'caption.outline_color', e, 'color')}${formField('Outline', 'caption.outline', e, 'number', 'min="0" max="12"')}${formField('Shadow', 'caption.shadow', e, 'number', 'min="0" max="12"')}${formField('Offset (sec)', 'caption.offset', e, 'number', 'min="-10" max="10" step=".05"')}</div>
   ${check('Caption background', 'cap-bg', !!c.background)}${c.background ? formField('Background color', 'caption.background', e, 'color') : ''}${formField('Vertical position', 'caption.position', e, 'range', 'min=".08" max=".93" step=".01"')}${selection('Highlight animation', 'caption.motion', [['pop', 'Pop'], ['word', 'Word highlight'], ['none', 'None']], c.motion)}${check('Uppercase', 'caption.uppercase', c.uppercase)}`;
     if (tab === 'frame') inspector.innerHTML = `<h4>Output aspect ratio</h4><div class="ratio-row">${ratioButtons()}</div>${selection('Layout', 'framing', Object.entries(FRAMES), e.framing === 'fit' ? 'fit' : 'track')}
-  ${e.framing === 'fit' ? '<p class="control-note">Center Fit: Keeps original video centered with an ambient blurred background. Nothing is cropped.</p>' : '<p class="control-note">Full Screen: Video fills the entire screen edge-to-edge with smart face tracking and safe headroom.</p>'}`;
+  ${e.framing === 'fit' ? selection('Background Style', 'background_style', Object.entries(backgroundStyles), e.background_style || 'blur') : ''}
+  ${e.framing === 'fit' ? '<p class="control-note">Center Fit: Keeps original video centered without cropping. Choose motion blur, black, or white backdrop.</p>' : '<p class="control-note">Full Screen: Video fills the entire screen edge-to-edge with smart face tracking and safe headroom.</p>'}`;
     if (tab === 'layers') inspector.innerHTML = `<h4>Text and image layers</h4><div class="actions">${btn('Add text', 'text', { attrs: de('new-text') })}${btn('Add image', 'image', { attrs: de('new-image') })}</div>
   ${e.overlays.length ? e.overlays.map((o, i) => `<div class="layer-line"><div class="row" style="min-width:0">${ico(o.type === 'image' ? 'image' : 'text', 12)} <span class="layer-name">${esc(o.type === 'text' ? o.text : assetsLocal.find(a => a.id === o.asset)?.name || 'Image layer')}</span></div><div class="row" style="gap:0">${iconBtn('Edit layer', 'edit', de('layer-edit', `data-index="${i}"`))}${iconBtn('Remove layer', 'trash', de('layer-delete', `data-index="${i}"`))}</div></div>`).join('') : '<p class="control-note">No layers yet. Add a title, logo, or timed image cutaway.</p>'}
   ${clip.insights.broll?.length ? `<h4>B-roll search ideas</h4><div class="broll-tags">${clip.insights.broll.map(t => `<span class="badge violet">${esc(t)}</span>`).join('')}</div><p class="tiny muted">Upload an image you have permission to use and set a layer timing.</p>` : ''}
@@ -126,10 +127,11 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
     try { ctx = new AudioContext(); gain = ctx.createGain(); ctx.createMediaElementSource(video).connect(gain).connect(ctx.destination); } catch { gain = null; }
   }
   function play() {
-    if (!video.paused) { video.pause(); return; }
+    if (!video.paused) { video.pause(); secondary.pause(); return; }
     const when = clock(); let next = when < draft.start_at || when >= draft.end_at - .07 ? (keep[0]?.[0] ?? draft.start_at) : skipCuts(when);
     if (next >= draft.end_at - .03) next = keep[0]?.[0] ?? draft.start_at; if (Math.abs(when - next) > .015) seek(next);
     constructAudio(); ctx?.resume().catch(() => { }); video.play().catch(e => { if (e.name !== 'AbortError') toast('Could not play this preview. Try reloading the page.', 'error'); });
+    if (pane2.style.display !== 'none') { secondary.currentTime = video.currentTime; secondary.play().catch(() => {}); }
   }
   function trim(key, val) {
     if (!Number.isFinite(val)) return;
@@ -149,18 +151,60 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
     const [w, h] = e.ratio.split(':').map(Number), box = stage.getBoundingClientRect(), r = w / h;
     const boundW = box.width - 23, boundH = box.height - 18;
     frameWidth = Math.max(40, Math.min(boundW, boundH * r)); frameHeight = frameWidth / r;
-    frame.style.width = frameWidth + 'px'; frame.style.height = frameHeight + 'px'; frame.style.background = e.background;
-    const isCenterFitRendered = e.framing === 'fit' && !!clip.video;
-    const targetSrc = isCenterFitRendered ? clip.video : project.preview;
+    frame.style.width = frameWidth + 'px'; frame.style.height = frameHeight + 'px';
+    const bgStyle = e.background_style || 'blur';
+    const canUseRenderedVideo = e.framing === 'fit' && !!clip.video && bgStyle === 'blur';
+    const targetSrc = canUseRenderedVideo ? clip.video : project.preview;
     if (video.getAttribute('data-src') !== targetSrc) {
       video.setAttribute('data-src', targetSrc);
       video.src = targetSrc;
-      video.currentTime = isCenterFitRendered ? clamp(t - draft.start_at, 0, durationOut) : t;
+      video.currentTime = canUseRenderedVideo ? clamp(t - draft.start_at, 0, durationOut) : t;
     }
-    const sw = video.videoWidth || (isCenterFitRendered ? 720 : project.info.width), sh = video.videoHeight || (isCenterFitRendered ? 1280 : project.info.height);
-    if (secondary.hasAttribute('src')) { secondary.pause(); secondary.removeAttribute('src'); secondary.load(); }
-    pane2.style.display = 'none'; pane.style.width = ''; pane.style.height = ''; pane.style.left = ''; pane.style.top = '';
-    if (isCenterFitRendered) {
+    const sw = video.videoWidth || (canUseRenderedVideo ? 720 : project.info.width), sh = video.videoHeight || (canUseRenderedVideo ? 1280 : project.info.height);
+    pane.style.width = ''; pane.style.height = ''; pane.style.left = ''; pane.style.top = '';
+
+    if (e.framing === 'fit') {
+      if (bgStyle === 'white') {
+        frame.style.background = '#ffffff';
+        pane2.style.display = 'none';
+        if (secondary.hasAttribute('src')) secondary.pause();
+      } else if (bgStyle === 'black') {
+        frame.style.background = '#000000';
+        pane2.style.display = 'none';
+        if (secondary.hasAttribute('src')) secondary.pause();
+      } else {
+        frame.style.background = '#140e1e';
+        if (!canUseRenderedVideo) {
+          pane2.style.display = 'block';
+          pane2.style.width = frameWidth + 'px';
+          pane2.style.height = frameHeight + 'px';
+          pane2.style.filter = 'blur(22px) brightness(0.65) saturate(1.4)';
+          pane2.style.transform = 'scale(1.15)';
+          if (secondary.getAttribute('data-src') !== project.preview) {
+            secondary.setAttribute('data-src', project.preview);
+            secondary.src = project.preview;
+          }
+          if (Math.abs(secondary.currentTime - video.currentTime) > 0.15) {
+            secondary.currentTime = video.currentTime;
+          }
+          if (!video.paused && secondary.paused) {
+            secondary.play().catch(() => {});
+          } else if (video.paused && !secondary.paused) {
+            secondary.pause();
+          }
+          fitVideo(secondary, frameWidth, frameHeight, sw, sh, 0.5, 0.5, false);
+        } else {
+          pane2.style.display = 'none';
+          if (secondary.hasAttribute('src')) secondary.pause();
+        }
+      }
+    } else {
+      frame.style.background = e.background;
+      pane2.style.display = 'none';
+      if (secondary.hasAttribute('src')) secondary.pause();
+    }
+
+    if (canUseRenderedVideo) {
       pane.style.width = frameWidth + 'px'; pane.style.height = frameHeight + 'px';
       video.style.width = frameWidth + 'px'; video.style.height = frameHeight + 'px';
       video.style.transform = '';
@@ -205,7 +249,7 @@ export function openEditor(root, { clip, project, analysis, presets, brands, ass
   function loop() { draw(); if (active && !video.paused) raf = requestAnimationFrame(loop); }
   function setPlayIcon() { const on = !video.paused; vplay.innerHTML = ico(on ? 'pause' : 'play', 16); vplay.setAttribute('aria-label', on ? 'Pause clip' : 'Play clip'); playOverlay.hidden = on; }
   video.addEventListener('loadedmetadata', () => { ready = true; seek(seekTo); }); video.addEventListener('error', () => { if (active) toast('The browser could not decode this preview. Try reopening the clip.', 'error'); });
-  video.addEventListener('seeked', draw); video.addEventListener('pause', () => { setPlayIcon(); cancelAnimationFrame(raf); draw(); }); video.addEventListener('play', () => { setPlayIcon(); cancelAnimationFrame(raf); loop(); });
+  video.addEventListener('seeked', draw); video.addEventListener('pause', () => { setPlayIcon(); cancelAnimationFrame(raf); secondary.pause(); draw(); }); video.addEventListener('play', () => { setPlayIcon(); cancelAnimationFrame(raf); if (pane2.style.display !== 'none') { secondary.currentTime = video.currentTime; secondary.play().catch(() => {}); } loop(); });
   const resize = new ResizeObserver(draw); resize.observe(stage);
   transcriptSearch.addEventListener('input', () => { wordFilter = transcriptSearch.value; fillTranscript(); });
   titleEl.addEventListener('change', () => { const v = titleEl.value.trim(); if (v) change(d => d.title = v); else titleEl.value = draft.title; });

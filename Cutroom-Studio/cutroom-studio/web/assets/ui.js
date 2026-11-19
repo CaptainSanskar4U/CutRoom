@@ -22,6 +22,7 @@ export const ratios=['9:16','16:9','1:1','4:5'];
 export const languages={auto:'Auto-detect',en:'English',hi:'Hindi',es:'Spanish',fr:'French',pt:'Portuguese',de:'German',ja:'Japanese',zh:'Chinese',ko:'Korean',ta:'Tamil',mr:'Marathi',ar:'Arabic',it:'Italian',nl:'Dutch',ru:'Russian',id:'Indonesian'};
 export const capNames={pulse:'Pulse (Pop & Pill)',hormozi:'Hormozi (Bold Impact)',beast:'Beast (Viral Pop)',cinema:'Cinema (Minimal Glow)',studio:'Studio (Clean)',spotlight:'Spotlight (Boxed)',mono:'Mono (Tech)'};
 export const layoutChoices={fit:'Center Fit (Original Aspect Ratio)',track:'Full Screen (Edge-to-Edge)'};
+export const backgroundStyles={blur:'Motion Blur (Blurred & Enlarged)',black:'Black background',white:'White background'};
 export const subtitleLanguages={auto:'Same as Spoken / Auto',en:'English',hi:'Hindi',es:'Spanish',fr:'French',pt:'Portuguese',de:'German',ja:'Japanese',zh:'Chinese',ko:'Korean',ta:'Tamil',mr:'Marathi',ar:'Arabic',it:'Italian',nl:'Dutch',ru:'Russian',id:'Indonesian'};
 
 export class ApiError extends Error{constructor(message,status,detail){super(message);this.status=status;this.detail=detail;}}

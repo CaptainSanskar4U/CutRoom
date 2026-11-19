@@ -552,7 +552,14 @@ def render(source,dest,meta,analysis,clip,options,assets,progress,depth=0):
         if isinstance(insights, str):
             try: insights = json.loads(insights)
             except Exception: insights = {}
-        cand = {'s': start, 'e': end, 'title': clip.get('title', ''), 'hook': (insights or {}).get('hook', '')}
+        cand = {
+            's': start,
+            'e': end,
+            'title': clip.get('title', ''),
+            'hook': (insights or {}).get('hook', ''),
+            'background_style': edit.get('background_style', 'blur'),
+            'edit': edit
+        }
         dest_path = Path(dest)
         centerfit_skill.execute_centerfit_skill(
             Path(source),
@@ -576,12 +583,26 @@ def render(source,dest,meta,analysis,clip,options,assets,progress,depth=0):
         args=['-ss',f'{start:.5f}','-t',f'{duration:.5f}',*INPUT_FLAGS,'-i',str(source)]
         filters=[]; base=f"[0:{meta['video_index']}]setpts=PTS-STARTPTS,setsar=1,fps=30"; framing=edit['framing']
         if framing=='fit':
-            filters.append(
-                f'{base},split=2[bgsrc][fgsrc];'
-                f'[bgsrc]scale={ow}:{oh}:force_original_aspect_ratio=increase,crop={ow}:{oh},boxblur=25:5[bg];'
-                f'[fgsrc]scale={ow}:{oh}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];'
-                f'[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[frame]'
-            )
+            bg_style = edit.get('background_style', 'blur')
+            if bg_style == 'black':
+                filters.append(
+                    f'color=c=black:s={ow}x{oh}:d={duration}[bg];'
+                    f'{base},scale={ow}:{oh}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];'
+                    f'[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[frame]'
+                )
+            elif bg_style == 'white':
+                filters.append(
+                    f'color=c=white:s={ow}x{oh}:d={duration}[bg];'
+                    f'{base},scale={ow}:{oh}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];'
+                    f'[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[frame]'
+                )
+            else:
+                filters.append(
+                    f'{base},split=2[bgsrc][fgsrc];'
+                    f'[bgsrc]scale={ow}:{oh}:force_original_aspect_ratio=increase,crop={ow}:{oh},boxblur=25:5[bg];'
+                    f'[fgsrc]scale={ow}:{oh}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[fg];'
+                    f'[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[frame]'
+                )
         elif framing == 'split':
             horizontal=ow/oh>1.20; subw,subh=(ow//2,oh) if horizontal else (ow,oh//2)
             filters.append(f'{base},split=2[vleft][vright]')

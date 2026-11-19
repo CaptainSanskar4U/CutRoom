@@ -15,6 +15,7 @@ class Prefs(Strict):
     length: Literal['auto','short','medium','long'] = 'auto'
     ratio: Ratio = '9:16'
     layout: Literal['track','fit','split','dualfocal','context'] = 'track'
+    background_style: Literal['blur','black','white'] = 'blur'
     language: Annotated[str, StringConstraints(pattern=r'^(auto|[a-z]{2,3})$')] = 'auto'
     subtitle_language: Annotated[str, StringConstraints(pattern=r'^(auto|[a-z]{2,3})$')] = 'auto'
     preset: Literal['pulse','hormozi','beast','cinema','studio','spotlight','mono'] = 'pulse'
@@ -99,6 +100,7 @@ class Overlay(Strict):
 class Edit(Strict):
     ratio: Ratio = '9:16'
     framing: Literal['track','manual','fit','split','dualfocal','context'] = 'track'
+    background_style: Literal['blur','black','white'] = 'blur'
     crop_x: Point = .5
     crop_y: Point = .5
     background: Color = '#171322'
@@ -141,14 +143,17 @@ def initial_edit(prefs_or_ratio, brand=None):
     if isinstance(prefs_or_ratio, dict):
         ratio = prefs_or_ratio.get('ratio', '9:16')
         framing = prefs_or_ratio.get('layout', 'track')
+        bg_style = prefs_or_ratio.get('background_style', 'blur')
         preset_name = prefs_or_ratio.get('preset', 'pulse')
     else:
         ratio = prefs_or_ratio
         framing = 'track'
+        bg_style = 'blur'
         preset_name = 'pulse'
     if framing not in ('fit', 'track'): framing = 'track'
+    if bg_style not in ('blur', 'black', 'white'): bg_style = 'blur'
     cap = PRESETS.get(preset_name, PRESETS['pulse'])
-    data = Edit(ratio=ratio, framing=framing, caption=cap).model_dump()
+    data = Edit(ratio=ratio, framing=framing, background_style=bg_style, caption=cap).model_dump()
     if brand:
         data.update(caption=brand['caption'], background=brand['background'])
         if brand.get('logo'): data['overlays'] = [Overlay(type='image', asset=brand['logo'], x=.85,y=.10,width=.18).model_dump()]
