@@ -191,7 +191,9 @@ function processing(p){
 }
 function clipCard(p,c){
  const a=`data-id="${c.id}"`,poster=c.poster||p.poster,score=c.score!=null?`<button type="button" class="score-chip" ${act('score',a)} aria-label="View Cut Score ${c.score}">${ico('bolt',12)} ${c.score} Cut Score</button>`:'';
- return `<article class="card clip-card"><div style="position:relative"><button class="thumb ${poster?'':'blank-thumb'}" ${act('preview-clip',a)} aria-label="Preview ${esc(c.title)}">${poster?`<img src="${esc(poster)}" alt="">`:''}<span class="clip-play">${ico('play',18)}</span><span class="time-chip">${time(c.end_at-c.start_at)}</span></button>${score}</div><div class="card-body"><div class="card-top"><button type="button" class="card-title" ${act('edit-clip',a)}>${esc(c.title)}</button>${iconBtn('Clip actions','dots',act('clip-menu',a))}</div><p class="clip-copy">${esc(c.insights.description||c.insights.reason||'Manually selected clip')}</p><div class="card-actions"><span class="small muted">${time(c.start_at)} – ${time(c.end_at)}</span>${btn('Edit clip','edit',{kind:'soft sm',attrs:act('edit-clip',a)})}</div></div></article>`;
+ const strat=c.insights?.opening_strategy;
+ const stratBadge=strat?`<span class="badge violet" style="font-size:9px;margin-top:2px;display:inline-flex;align-items:center;gap:3px;">${{natural_start:'✨ Natural Start',title_overlay:'📌 Title Overlay',cold_open_then_context:'⚡ Cold Open',walk_back_compressed:'✂️ Compressed Walk-Back'}[strat]||strat}</span>`:'';
+ return `<article class="card clip-card"><div style="position:relative"><button class="thumb ${poster?'':'blank-thumb'}" ${act('preview-clip',a)} aria-label="Preview ${esc(c.title)}">${poster?`<img src="${esc(poster)}" alt="">`:''}<span class="clip-play">${ico('play',18)}</span><span class="time-chip">${time(c.end_at-c.start_at)}</span></button>${score}</div><div class="card-body"><div class="card-top"><button type="button" class="card-title" ${act('edit-clip',a)}>${esc(c.title)}</button>${iconBtn('Clip actions','dots',act('clip-menu',a))}</div>${stratBadge}<p class="clip-copy" style="margin-top:3px">${esc(c.insights.description||c.insights.reason||'Manually selected clip')}</p><div class="card-actions"><span class="small muted">${time(c.start_at)} – ${time(c.end_at)}</span>${btn('Edit clip','edit',{kind:'soft sm',attrs:act('edit-clip',a)})}</div></div></article>`;
 }
 function projectReady(p){
  const clips=[...(p.clips||[])];if(state.clipSort==='time')clips.sort((a,b)=>a.start_at-b.start_at);if(state.clipSort==='new')clips.sort((a,b)=>b.created-a.created);
@@ -216,7 +218,15 @@ function clipFind(id){return state.project?.clips?.find(x=>x.id===id);}
 function projectFind(id){return state.project?.id===id?state.project:state.projects.find(x=>x.id===id);}
 
 function scoreDialog(c){
- const data=c.insights;modal({title:'Why this clip was selected',kicker:'CUT SCORE',body:`<div class="row" style="margin-bottom:12px"><div class="score-num">${c.score??'—'}</div><p class="muted small">Relative editorial ranking<br>Not a forecast of virality</p></div><p class="modal-lead">${esc(data.reason||'Manually selected.')}</p><div class="score-grid">${Object.entries(data.axes||{}).map(([k,v])=>`<div class="score-axis"><span>${axes[k]||esc(k)}</span>${progress(v)}<b>${v}</b></div>`).join('')}</div>${data.hook?`<div class="divider"></div><p class="inline-note">OPENING LINE</p><p class="small">${esc(data.hook)}</p>`:''}`});
+ const data=c.insights;
+ const strat=data.opening_strategy?({natural_start:'Natural Opening',title_overlay:'Title Overlay (Context by Text)',cold_open_then_context:'Cold Open + Context Build',walk_back_compressed:'Compressed Walk-Back'}[data.opening_strategy]||data.opening_strategy):null;
+ const viralScores=data.viral_scores||null;
+ modal({title:'Why this clip was selected',kicker:'CUT SCORE & VIRAL HOOK AUDIT',body:`<div class="row" style="margin-bottom:12px"><div class="score-num">${c.score??'—'}</div><div><p class="muted small" style="margin:0">Relative editorial ranking</p>${strat?`<span class="badge violet" style="font-size:10px;margin-top:4px;display:inline-block">🎯 ${esc(strat)}</span>`:''}</div></div>
+ <p class="modal-lead">${esc(data.reason||'Manually selected.')}</p>
+ ${viralScores?`<div class="tip" style="margin-bottom:12px;background:#f3eefb;border-color:#d7c7f3;color:#3f2868"><div style="width:100%"><div class="row" style="justify-content:space-between;margin-bottom:4px"><strong>⚡ Cold Viewer 3s Retention Test</strong><span class="badge green">14-Point Checklist Passed</span></div><div class="row" style="gap:12px;font-size:11px"><span>Clarity: <b>${viralScores.clarity}/2</b></span><span>Curiosity: <b>${viralScores.curiosity}/2</b></span><span>Continuity: <b>${viralScores.continuity}/2</b></span>${data.speech_cuts_count?`<span>Speech cuts: <b>${data.speech_cuts_count}</b></span>`:''}</div></div></div>`:''}
+ <div class="score-grid">${Object.entries(data.axes||{}).map(([k,v])=>`<div class="score-axis"><span>${axes[k]||esc(k)}</span>${progress(v)}<b>${v}</b></div>`).join('')}</div>
+ ${data.hook?`<div class="divider"></div><p class="inline-note">OPENING HOOK LINE</p><p class="small" style="font-weight:600;color:#2c1b48">${esc(data.hook)}</p>`:''}
+ ${data.title_overlay?`<p class="inline-note" style="margin-top:6px">CONTEXT TITLE OVERLAY</p><p class="small muted">${esc(data.title_overlay)}</p>`:''}`});
 }
 function previewDialog(p,c=null){
  const from=c?.video?0:(c?.start_at??0),to=c?.video?(c.end_at-c.start_at):(c?.end_at??p.info.duration);

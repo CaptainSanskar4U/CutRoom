@@ -36,9 +36,17 @@ def transcribe(audio, duration, language, progress):
     words = []
     detected_lang = 'en'
     target_lang = None if (not language or language in ('auto', 'all')) else language
+
+    if not isinstance(audio, np.ndarray):
+        try:
+            audio_input = read_pcm(audio)
+        except Exception:
+            audio_input = audio
+    else:
+        audio_input = audio
     
     segments, info = model.transcribe(
-        audio, word_timestamps=True, vad_filter=True,
+        audio_input, word_timestamps=True, vad_filter=True,
         vad_parameters={'min_silence_duration_ms': 350, 'speech_pad_ms': 150},
         language=target_lang,
         beam_size=1, condition_on_previous_text=False
@@ -366,6 +374,16 @@ def rank(words, duration, prefs, track=(), waveform=(), language='en', heatmap=(
             clips.append(copy | dict(s=round(s,3),e=round(e,3),score=final_score,axes={k:round(v*100) for k,v in axes.items()},reason=explain(axes), topics=topics,mode='speech',_transcript=' '.join(text)))
     enrich_with_llm(clips)
     for x in clips: x.pop('_transcript',None)
+
+    # Mandatory Viral Clip Hook & Context Optimization Skill
+    from . import viral_hook_skill
+    clips = viral_hook_skill.optimize_candidates(
+        raw_candidates=clips,
+        words=words,
+        duration=duration,
+        target_count=target_count,
+        max_clip_length=float(max_len)
+    )
     return clips
 
 

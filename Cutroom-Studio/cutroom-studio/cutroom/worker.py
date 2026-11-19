@@ -94,6 +94,12 @@ def add_clips(c,project,candidates,prefs,exclude=()):
     for cand in candidates:
         if any(abs(cand['s']-a)<.42 and abs(cand['e']-b)<.42 for a,b in exclude): continue
         id=store.uid(); edit=schema.initial_edit(prefs,brand)
+        if cand.get('cuts'):
+            from .schema import Range
+            edit['cuts'] = [Range(s=cut['from'], e=cut['to']).model_dump() for cut in cand['cuts'] if cut['to'] > cut['from']]
+        if cand.get('title_overlay') and cand.get('opening_strategy') in ('title_overlay', 'cold_open_then_context'):
+            from .schema import Overlay
+            edit['overlays'] = [Overlay(type='text', text=cand['title_overlay'], x=0.5, y=0.18, color='#ffffff', size=52).model_dump()]
         if cand.get('rendered_video') and Path(cand['rendered_video']).is_file():
             edit['centerfit_video'] = f"/api/clips/{id}/video"
             clip_file = media.project_dir(project['id']) / 'clips' / f"{id}.mp4"
@@ -106,8 +112,14 @@ def add_clips(c,project,candidates,prefs,exclude=()):
                 video.still(clip_file, f, min(1.0, (cand['e'] - cand['s']) * 0.5), 480)
                 cand['poster_key'] = key
             except Exception: pass
+        insights_data = cand.get('insights', {})
+        if not isinstance(insights_data, dict): insights_data = {}
+        for k in ('opening_strategy', 'viral_scores', 'hook_line', 'hook_type', 'title_overlay', 'viral_checklist_passed', 'cuts'):
+            if k in cand and k not in insights_data: insights_data[k] = cand[k]
+        extra_meta = {k: v for k, v in cand.items() if k not in ('title', 's', 'e', 'score', 'insights')}
+        combined_insights = {**insights_data, **extra_meta}
         c.execute('INSERT INTO clips (id,project_id,title,start_at,end_at,score,insights,edit,created) VALUES(?,?,?,?,?,?,?,?,?)',
-            (id,project['id'],cand['title'],cand['s'],cand['e'],cand['score'],dump({k:v for k,v in cand.items() if k not in ('title','s','e','score')}),dump(edit),now))
+            (id,project['id'],cand['title'],cand['s'],cand['e'],cand['score'],dump(combined_insights),dump(edit),now))
         ids.append(id)
     return ids
 
@@ -186,7 +198,7 @@ def analysis_job(job,project,report):
                         res = centerfit_skill.execute_centerfit_skill(src_to_use, cand, telemetry['words'], out_clip)
                         cand['rendered_video'] = str(out_clip)
                         cand['centerfit_metadata'] = res
-                        cand['title'] = f"{res['hook1']} {res['hook2']}"
+                        cand['title'] = cand.get('title_overlay') or f"{res['hook1']} {res['hook2']}"
                     except Exception as e:
                         LOG.warning('centerfit_skill_execution_failed idx=%s err=%s', idx, e)
             else:
@@ -272,7 +284,7 @@ def analysis_job(job,project,report):
                 res = centerfit_skill.execute_centerfit_skill(src_to_use, cand, data['words'], out_clip)
                 cand['rendered_video'] = str(out_clip)
                 cand['centerfit_metadata'] = res
-                cand['title'] = f"{res['hook1']} {res['hook2']}"
+                cand['title'] = cand.get('title_overlay') or f"{res['hook1']} {res['hook2']}"
             except Exception as e:
                 LOG.warning('centerfit_skill_execution_failed idx=%s err=%s', idx, e)
     else:

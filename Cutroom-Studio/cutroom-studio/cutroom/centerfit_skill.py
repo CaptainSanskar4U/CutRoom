@@ -154,7 +154,9 @@ def execute_centerfit_skill(
 
         # 3. Step 2 & 3: Text Assets
         if progress_cb: progress_cb(45, "CenterFitClip: Formulating hook typography & captions...")
-        hook1, hook2 = split_hook(cand.get("title", ""), cand.get("hook", ""))
+        title_for_hook = cand.get("title_overlay") or cand.get("title", "")
+        hook_sub = cand.get("hook_line") or cand.get("hook", "")
+        hook1, hook2 = split_hook(title_for_hook, hook_sub)
         build_captions_json(transcript_words, start_at, end_at, captions_json)
 
         # Reaction labels from audio peaks
