@@ -46,12 +46,41 @@ function home(){
  <span class="art-rays">${ico('sparkle',28)}</span><span class="art-rays two">${ico('sparkle',18)}</span><span class="art-rays three">${ico('sparkle',14)}</span>
  <span class="art-tag start">${ico('film',12)} SOURCE FOOTAGE</span><div class="art-source"><img src="/assets/studio-portrait.jpg" alt=""><span class="art-play">${ico('play',15)}</span><span class="time-chip">18:42</span></div>
  <div class="art-output"><img src="/assets/studio-portrait.jpg" alt=""><span class="art-ratio">9:16</span><span class="art-caption">THIS CHANGES<br><strong>EVERYTHING.</strong></span></div><div class="art-tag end">${ico('sparkle',12)} AI REFRAME</div></div></section>
+ <section class="project-section live-stream-section" id="live-stream-clips-section" aria-labelledby="live-stream-heading"><div class="section-head"><div><h2 id="live-stream-heading" style="font-size:18px;font-weight:800;letter-spacing:-.03em">Live Stream Clips</h2></div></div><div id="live-stream-clips-box" class="live-stream-box"></div></section>
  <section class="project-section" aria-labelledby="recent-heading"><div class="section-head"><div><h2 id="recent-heading">Recent projects</h2><p>${state.projects.length?'Continue editing your latest videos.':'Start with a real example, or bring your own video.'}</p></div><div class="actions"><label class="search">${ico('search',16)}<span class="sr-only">Search projects</span><input id="project-search" placeholder="Search projects" value="${esc(state.search)}"></label>${btn('View all','arrow',{tag:'a',attrs:'href="#projects"'})}</div></div><div id="project-cards"></div></section>
  <footer class="home-foot"><span class="row">${ico('book',14)} <button type="button" class="linkish" ${act('help')}>New to Cutroom?</button><span> See how your first cut comes together.</span></span><span>Cutroom Studio · creator tools</span></footer>`;
  const q=$('#quick-url',view);q.onsubmit=e=>{e.preventDefault();newProject({url:q.elements.url.value.trim()});};
  $('#project-search',view).oninput=e=>{state.search=e.target.value;fillCards(true);};
  const hero=$('#quick-drop',view);hero.ondragover=e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();hero.classList.add('is-drop');}};hero.ondragleave=()=>hero.classList.remove('is-drop');hero.ondrop=e=>{if(e.dataTransfer.files.length){e.preventDefault();hero.classList.remove('is-drop');newProject({file:e.dataTransfer.files[0]});}};
  fillCards(true);
+ loadLiveStreamClips();
+}
+
+async function loadLiveStreamClips(){
+ const box=$('#live-stream-clips-box');if(!box)return;
+ try{
+  const res=await api('/livestream/clips');
+  const clips=res?.clips||[];
+  if(!clips.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="cards" style="padding:16px;">`+clips.map(c=>`
+   <article class="card clip-card">
+    <button type="button" class="thumb ${c.poster?'':'blank-thumb'}" ${act('preview-livestream',`data-id="${esc(c.id)}"`)} aria-label="Play ${esc(c.title)}">
+     ${c.poster?`<img src="${esc(c.poster)}" alt="" loading="eager">`:`<span class="thumb-symbol">${ico('film',25)}</span>`}
+     ${c.duration?`<span class="time-chip">${time(c.duration)}</span>`:''}
+     <span class="clip-play">${ico('play',17)}</span>
+    </button>
+    <div class="card-body">
+     <div class="card-top">
+      <button class="card-title" type="button" ${act('preview-livestream',`data-id="${esc(c.id)}"`)}>${esc(c.title)}</button>
+     </div>
+     <div class="card-meta">
+      ${ico('sparkle',12)} ${esc(c.streamer||'Live Stream')} <span class="divider-dot">·</span> ${esc(c.engine||'gta6-clipper')}
+     </div>
+    </div>
+   </article>`).join('')+`</div>`;
+ }catch(e){
+  box.innerHTML='';
+ }
 }
 
 function projectCard(p,sample=false){
@@ -371,6 +400,7 @@ async function onAction(name,id,el){
  case 'brand-create':await brandForm();break;case 'brand-from-preset':await brandForm(null,id);break;case 'brand-edit':await brandForm(state.brands.find(x=>x.id===id));break;
  case 'brand-delete':confirmDialog('Delete this brand kit?','Existing clips keep their saved style and assets.','Delete brand kit',async()=>{await api(`/brands/${id}`,'DELETE');await loadBrand();closeModal();brandPage();toast('Brand kit deleted.');});break;
  case 'billing-checkout':case 'billing-portal':await action(el,async()=>{const a=await api('/billing/'+name.split('-')[1],'POST');window.open(a.url,'_blank','noopener,noreferrer')||location.assign(a.url);});break;
+ case 'preview-livestream':{const res=await api('/livestream/clips').catch(()=>({clips:[]}));const c=(res.clips||[]).find(x=>x.id===id);if(!c)return;modal({title:c.title||'Live Stream Clip',kicker:'GTA6 CLIPPER ENGINE',wide:true,body:`<video class="preview-loading" src="${esc(c.video_url)}" controls autoplay playsinline style="max-height:70vh;border-radius:var(--radius);"></video><div class="dialog-footer" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--muted);">${ico('sparkle',12)} Engine: ${esc(c.engine)} · Streamer: ${esc(c.streamer||'Live')} · ${time(c.duration)}</span>${btn('Download MP4','download',{tag:'a',kind:'primary',attrs:`href="${esc(c.video_url)}" download="${esc(c.id)}.mp4"`})}</div>`});break;}
  }
 }
 document.addEventListener('click',e=>{const t=e.target.closest('[data-action]');if(!t||t.disabled)return;e.preventDefault();onAction(t.dataset.action,t.dataset.id,t).catch(e=>toast(e.message||'Could not finish the action.','error'));});
@@ -405,6 +435,6 @@ setInterval(async()=>{
  try{
   if(screen==='project')await refreshProject();
   if(screen==='exports'){const prev=state.jobs;await loadJobs();if(state.screen==='exports'&&JSON.stringify(prev)!==JSON.stringify(state.jobs)){const finished=state.jobs.find(x=>x.status==='done'&&prev.some(j=>j.id===x.id&&['queued','running'].includes(j.status)));if(finished)toast('Your MP4 is ready to download.');fillExports();}}
-  if(['home','projects'].includes(screen)){const key=JSON.stringify(state.projects.map(keyFor));await loadProjects();if(state.screen===screen&&key!==JSON.stringify(state.projects.map(keyFor)))fillCards(screen==='home');}
+  if(['home','projects'].includes(screen)){const key=JSON.stringify(state.projects.map(keyFor));await loadProjects();if(state.screen===screen&&key!==JSON.stringify(state.projects.map(keyFor)))fillCards(screen==='home');if(screen==='home')loadLiveStreamClips();}
  }catch(e){if(e.status===401){state.me=null;state.projects=[];state.jobs=[];state.use=null;chrome();}}finally{state.polling=false;}
 },2000);

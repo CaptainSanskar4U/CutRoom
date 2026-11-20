@@ -17,4 +17,5 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 @media(min-width:761px){.topbar .mobile-menu{display:none}}
 .hero.is-drop{outline:3px dashed #976cee;outline-offset:3px}.card-title{min-width:0;flex:1}.clip-card .card-body{grid-template-columns:minmax(0,1fr)}.clip-card .card-top,.clip-card .card-actions{min-width:0}.clip-card .card-actions .btn{flex:none}
+.live-stream-section{margin-top:24px}.live-stream-box{min-height:120px;background:var(--paper);border:1px dashed var(--line);border-radius:var(--radius);transition:border-color .15s}
 @media(max-width:520px){.hero-art{right:-11px;width:39%;opacity:.47}.crumb>svg:first-of-type{display:none}.crumb .mobile-menu{margin-left:-3px}}

@@ -457,6 +457,54 @@ def clip_poster(id:schema.Id,me=Depends(require)):
     f=media.thumb_file(p,key) if re.fullmatch(r'[0-9]+-[0-9]+',key) else None
     return private(f if f and f.is_file() else media.poster_file(p),'image/jpeg')
 
+
+@app.get('/api/livestream/clips')
+def get_livestream_clips():
+    from . import gta6_integration
+    clips = gta6_integration.list_livestream_clips()
+    return {'clips': clips}
+
+
+@app.post('/api/livestream/generate')
+def create_livestream_clip(payload: dict):
+    from . import gta6_integration
+    src = payload.get('src') or str(Path('E:/OpusClips/podcast_interview.mp4'))
+    start = float(payload.get('start', 5.0))
+    end = float(payload.get('end', 20.0))
+    hook = payload.get('hook', 'STREAMER GOES VIRAL')
+    streamer = payload.get('streamer', 'Live Streamer')
+    style = payload.get('style', 'classic')
+    layout = payload.get('layout', 'stack')
+    
+    clip_info = gta6_integration.generate_clip_from_video(
+        src_video=Path(src),
+        start=start,
+        end=end,
+        hook=hook,
+        streamer=streamer,
+        style=style,
+        layout=layout
+    )
+    return {'ok': True, 'clip': clip_info}
+
+
+@app.get('/api/livestream/video/{filename}')
+def get_livestream_video(filename: str):
+    from . import gta6_integration
+    f = gta6_integration.DATA_DIR / filename
+    if not f.is_file():
+        err(404, 'Live stream video not found')
+    return FileResponse(f, media_type='video/mp4')
+
+
+@app.get('/api/livestream/poster/{filename}')
+def get_livestream_poster(filename: str):
+    from . import gta6_integration
+    f = gta6_integration.DATA_DIR / filename
+    if not f.is_file():
+        err(404, 'Live stream poster not found')
+    return FileResponse(f, media_type='image/jpeg')
+
 @app.put('/api/clips/{id}')
 def update_clip(id:schema.Id,change:schema.ClipUpdate,me=Depends(require)):
     edit=change.edit.model_dump()
