@@ -18,4 +18,20 @@
 @media(min-width:761px){.topbar .mobile-menu{display:none}}
 .hero.is-drop{outline:3px dashed #976cee;outline-offset:3px}.card-title{min-width:0;flex:1}.clip-card .card-body{grid-template-columns:minmax(0,1fr)}.clip-card .card-top,.clip-card .card-actions{min-width:0}.clip-card .card-actions .btn{flex:none}
 .live-stream-section{margin-top:24px}.live-stream-box{min-height:120px;background:var(--paper);border:1px dashed var(--line);border-radius:var(--radius);transition:border-color .15s}
+.social-card{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#fbf9ff;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;transition:border-color .15s}
+.social-card:hover{border-color:#bfaaf8}
+.social-info{display:flex;align-items:center;gap:12px}
+.social-badge{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;color:#fff}
+.social-badge.youtube{background:#ff0000}
+.social-badge.instagram{background:radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%)}
+.social-badge.tiktok{background:#000000}
+.social-meta strong{display:block;font-size:13px;font-weight:750}
+.social-meta span{display:block;font-size:11px;color:var(--muted)}
+.publish-preview{display:flex;gap:16px;background:#f8f5fc;border-radius:10px;padding:12px;margin-bottom:14px}
+.publish-thumb{width:80px;aspect-ratio:9/16;background:#000;border-radius:6px;overflow:hidden;position:relative}
+.publish-thumb video, .publish-thumb img{width:100%;height:100%;object-fit:cover}
+.publish-details{flex:1;display:grid;gap:4px}
+.platform-pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:750;padding:3px 8px;border-radius:6px;width:fit-content}
+.publish-success-card{text-align:center;padding:24px 16px;display:grid;place-items:center;gap:12px}
+.success-icon-wrap{width:56px;height:56px;border-radius:50%;background:#eaf8ea;color:#16a34a;display:grid;place-items:center}
 @media(max-width:520px){.hero-art{right:-11px;width:39%;opacity:.47}.crumb>svg:first-of-type{display:none}.crumb .mobile-menu{margin-left:-3px}}

@@ -2,7 +2,7 @@ import {ico,$,$$,esc,clone,clamp,time,date,size,option,btn,iconBtn,blank,spinner
 import {openEditor} from './editor.js';
 
 const view=$('#view'),sidebar=$('#sidebar'),top=$('#topbar');
-const state={me:null,config:{max_bytes:2147483648,chunk_bytes:5242880,guest:true,import_hosts:[]},use:null,samples:[],projects:[],brands:[],assets:[],presets:{},jobs:[],screen:'home',id:'',project:null,editor:null,upload:null,ready:false,mobile:false,search:'',filter:'all',sort:'recent',layout:'grid',clipSort:'score',counter:0,polling:false,pending:null};
+const state={me:null,config:{max_bytes:2147483648,chunk_bytes:5242880,guest:true,import_hosts:[]},use:null,samples:[],projects:[],brands:[],assets:[],presets:{},jobs:[],socialAccounts:[],screen:'home',id:'',project:null,editor:null,upload:null,ready:false,mobile:false,search:'',filter:'all',sort:'recent',layout:'grid',clipSort:'score',counter:0,polling:false,pending:null};
 const navs=[['home','home','Clipping studio'],['projects','folder','Projects'],['brand','palette','Brand kits'],['exports','download','Export center'],['settings','settings','Settings']];
 const axes={hook:'Opening hook',engagement:'Engagement',completeness:'Completeness',emotion:'Expressiveness',density:'Information',independence:'Independence',confidence:'Speech quality',duration:'Length fit',ending:'Ending'};
 const statuses={uploading:['Uploading','amber'],queued:['Queued','violet'],processing:['Processing','violet'],ready:['Ready','green'],failed:['Attention','red'],done:['Ready','green'],running:['Rendering','violet']};
@@ -56,11 +56,15 @@ function home(){
  loadLiveStreamClips();
 }
 
+let lastLiveStreamClipsKey = '';
 async function loadLiveStreamClips(){
  const box=$('#live-stream-clips-box');if(!box)return;
  try{
   const res=await api('/livestream/clips');
   const clips=res?.clips||[];
+  const key=JSON.stringify(clips.map(c=>c.id));
+  if(key===lastLiveStreamClipsKey)return;
+  lastLiveStreamClipsKey=key;
   if(!clips.length){box.innerHTML='';return;}
   box.innerHTML=`<div class="cards" style="padding:16px;">`+clips.map(c=>`
    <article class="card clip-card">
@@ -267,7 +271,7 @@ function previewDialog(p,c=null){
  const isFit = c?.edit?.framing === 'fit';
  const kickerText = c ? (c.video ? (isFit ? 'CENTER FIT POLISHED SHORT' : 'FULL SCREEN POLISHED SHORT') : 'SOURCE EXCERPT') : 'SOURCE VIDEO';
  const noteText = c ? (c.video ? (isFit ? 'Polished 9:16 Center Fit video with kinetic hooks, reaction punch-zooms & sound design.' : 'Polished 9:16 Full Screen Edge-to-Edge video with intelligent scene-aware camera tracking.') : 'Original excerpt. Open the editor for reframing and captions.') : 'Original video before any clip edits.';
- const d=modal({title:c?.title||p.title,kicker:kickerText,wide:true,body:`<video class="preview-loading" src="${esc(src)}" poster="${esc(c?.poster||p.poster||'')}" controls playsinline preload="metadata"></video><div class="dialog-footer"><p class="inline-note" style="margin-right:auto">${noteText}</p>${c?btn('Open editor','edit',{kind:'primary',attrs:act('edit-clip',`data-id="${c.id}"`)}):''}</div>`});
+ const d=modal({title:c?.title||p.title,kicker:kickerText,wide:true,body:`<video class="preview-loading" src="${esc(src)}" poster="${esc(c?.poster||p.poster||'')}" controls playsinline preload="metadata"></video><div class="dialog-footer"><p class="inline-note" style="margin-right:auto">${noteText}</p>${c?`${btn('Publish to Shorts/Reels','share',{kind:'primary',attrs:act('publish-dialog',`data-id="${c.id}"`)})} ${btn('Open editor','edit',{attrs:act('edit-clip',`data-id="${c.id}"`)} )}`:''}</div>`});
  const v=$('video',d);v.addEventListener('loadedmetadata',()=>{v.currentTime=from;},{once:true}); if(c&&!c.video){v.addEventListener('timeupdate',()=>{if(v.currentTime>=to){v.pause();v.currentTime=to-.01;}if(v.currentTime<from-.2)v.currentTime=from;});v.addEventListener('play',()=>{if(v.currentTime>=to-.07)v.currentTime=from;});}
 }
 function transcriptDialog(p){
@@ -318,8 +322,197 @@ function settingsPage(){
  const p=state.use||{seconds:0,limit:1800,projects:0,exports:0,bytes:0,storage_limit:3*1024**3};
  const account=state.me?.email;
  view.innerHTML=header('PREFERENCES','Workspace settings','Manage your profile, defaults, and monthly processing allowance.')+`<div class="settings-grid"><section class="section-box surface"><form id="settings-form" class="setting-form"><h3>Profile &amp; defaults</h3><p>${account?`Signed in as ${esc(account)}.`:'Save this workspace to an account to sign in from another browser.'}</p><label class="field">Display name<input name="name" maxlength="80" required value="${esc(who())}"></label><div class="grid2"><label class="field">Default aspect ratio<select name="ratio">${ratiosOpts(state.me?.preferred?.ratio||'9:16')}</select></label><label class="field">Default spoken language<select name="language">${langOpts(state.me?.preferred?.language||'auto')}</select></label></div><p class="form-error" hidden></p><div class="actions"><button class="btn primary" type="submit">${ico('check',16)} Save preferences</button>${account?btn('Sign out','logout',{attrs:act('logout')}):btn('Create account','user',{attrs:act('register')} )+btn('Sign in',null,{kind:'ghost',attrs:act('login')})}</div></form></section>
- <section class="section-box surface"><div class="spread"><h3>Plan &amp; usage</h3><span class="badge violet">${esc(plan())}</span></div><p>Processing allowance resets each calendar month (UTC). Examples and re-ranking do not count.</p><div class="meter"><div class="spread"><b>${minute(p.seconds)} of ${p.limit/60} min used</b><span class="small muted">${Math.min(100,Math.round(p.seconds/p.limit*100))}%</span></div>${progress(Math.round(p.seconds/p.limit*100))}</div><div class="stat-grid"><div><strong>${p.projects}</strong><span>Projects</span></div><div><strong>${p.exports}</strong><span>Exports this month</span></div><div><strong>${size(p.bytes)}</strong><span>Source storage</span></div></div>${state.config.stripe&&account?btn(plan()==='Studio'?'Manage subscription':'Upgrade to Studio','bolt',{kind:'soft',attrs:act(plan()==='Studio'?'billing-portal':'billing-checkout')}):`<div class="tip">${ico('info',15)} <span>${!state.config.stripe?'Paid subscriptions are not configured on this instance. Your current allowance is active.':'Create an account to manage a subscription.'}</span></div>`}</section></div>`;
+ <section class="section-box surface"><div class="spread"><h3>Plan &amp; usage</h3><span class="badge violet">${esc(plan())}</span></div><p>Processing allowance resets each calendar month (UTC). Examples and re-ranking do not count.</p><div class="meter"><div class="spread"><b>${minute(p.seconds)} of ${p.limit/60} min used</b><span class="small muted">${Math.min(100,Math.round(p.seconds/p.limit*100))}%</span></div>${progress(Math.round(p.seconds/p.limit*100))}</div><div class="stat-grid"><div><strong>${p.projects}</strong><span>Projects</span></div><div><strong>${p.exports}</strong><span>Exports this month</span></div><div><strong>${size(p.bytes)}</strong><span>Source storage</span></div></div>${state.config.stripe&&account?btn(plan()==='Studio'?'Manage subscription':'Upgrade to Studio','bolt',{kind:'soft',attrs:act(plan()==='Studio'?'billing-portal':'billing-checkout')}):`<div class="tip">${ico('info',15)} <span>${!state.config.stripe?'Paid subscriptions are not configured on this instance. Your current allowance is active.':'Create an account to manage a subscription.'}</span></div>`}</section>
+ ${renderSocialSection()}</div>`;
  const f=$('#settings-form',view);f.onsubmit=e=>{e.preventDefault();action($('button[type=submit]',f),async()=>{try{if(!await ensureUser())return;state.me=await api('/settings','PATCH',Object.fromEntries(new FormData(f)));chrome();toast('Preferences saved.');}catch(e){formError(f,e.message);}});};
+}
+
+function renderSocialSection(){
+ const accs = state.socialAccounts || [];
+ const platforms = [
+  {id:'youtube', name:'YouTube Shorts', icon:'youtube'},
+  {id:'instagram', name:'Instagram Reels', icon:'instagram'},
+  {id:'tiktok', name:'TikTok', icon:'tiktok'}
+ ];
+ return `<section class="section-box surface" style="grid-column:1/-1;">
+  <div class="spread"><h3>Connected social channels</h3><span class="badge violet">Direct 1-Click Publishing</span></div>
+  <p style="margin-bottom:12px;">Publish your clips directly to YouTube Shorts, Instagram Reels, and TikTok without manual file downloading.</p>
+  <div class="social-accounts-list">
+   ${platforms.map(p => {
+     const found = accs.find(a => a.platform === p.id);
+     return `<div class="social-card">
+      <div class="social-info">
+       <span class="social-badge ${p.id}">${ico(p.icon, 18)}</span>
+       <div class="social-meta">
+        <strong>${esc(p.name)}</strong>
+        <span>${found ? esc(found.handle || found.name) : 'Not connected'}</span>
+       </div>
+      </div>
+      <div>
+       ${found
+         ? `<span class="badge green" style="margin-right:8px;">Connected</span>${btn('Disconnect', 'trash', {kind:'danger', attrs:act('social-disconnect', `data-id="${found.id}"`)})}`
+         : btn('Connect Channel', 'plus', {kind:'soft', attrs:act('social-connect', `data-id="${p.id}"`)})
+       }
+      </div>
+     </div>`;
+   }).join('')}
+  </div>
+ </section>`;
+}
+
+async function loadSocialAccounts(){
+ try {
+  const r = await api('/social/accounts');
+  state.socialAccounts = r.accounts || [];
+ } catch(_) {
+  state.socialAccounts = [];
+ }
+}
+
+function connectSocialDialog(platform='youtube', onConnected=null){
+ const platformNames = {youtube:'YouTube Shorts', instagram:'Instagram Reels', tiktok:'TikTok'};
+ const d = modal({
+  title: `Connect ${platformNames[platform] || 'Channel'}`,
+  kicker: 'SOCIAL CONNECTOR',
+  body: `
+   <form id="connect-social-form" class="stack">
+    <p class="modal-lead">Connect your channel to publish clips directly in 1 click.</p>
+    <label class="field">Channel or Handle
+     <input name="handle" placeholder="@MyChannel" required value="@CreatorShorts">
+    </label>
+    <label class="field">Account Display Name
+     <input name="name" placeholder="Channel Display Name" required value="Creator Studio">
+    </label>
+    <input type="hidden" name="platform" value="${esc(platform)}">
+    <p class="form-error" hidden></p>
+    <div class="dialog-footer">
+     ${btn('Cancel', null, {attrs:act('close')})}
+     <button type="submit" class="btn primary">${ico('check', 16)} Connect Channel</button>
+    </div>
+   </form>
+  `
+ });
+
+ const form = $('#connect-social-form', d);
+ form.onsubmit = e => {
+  e.preventDefault();
+  action($('button[type=submit]', form), async () => {
+   const data = Object.fromEntries(new FormData(form));
+   try {
+    await api('/social/connect', 'POST', data);
+    await loadSocialAccounts();
+    closeModal();
+    toast(`${platformNames[platform] || 'Channel'} connected!`);
+    if(state.screen === 'settings') settingsPage();
+    if(onConnected) onConnected();
+   } catch(err) {
+    formError(form, err.message);
+   }
+  });
+ };
+}
+
+async function publishDialog({clipId, videoUrl, title, description, tags}){
+ try{
+  const res = await api('/social/accounts');
+  state.socialAccounts = res.accounts || [];
+ }catch(_){}
+ 
+ let accounts = state.socialAccounts || [];
+ if(!accounts.length){
+  connectSocialDialog('youtube', () => publishDialog({clipId, videoUrl, title, description, tags}));
+  return;
+ }
+
+ const clipTitle = title || 'Viral Short';
+ const clipDesc = description || `${clipTitle}\n\n#Shorts #viral #cutroom #clips`;
+
+ const d = modal({
+  title: 'Publish to Social Channels',
+  kicker: 'DIRECT EXPORT & PUBLISH',
+  wide: true,
+  body: `
+   <form id="publish-form" class="stack">
+    <div class="publish-preview">
+     <div class="publish-thumb">
+      ${videoUrl ? `<video src="${esc(videoUrl)}" muted playsinline></video>` : `<div style="height:100%;display:grid;place-items:center;color:#fff;">${ico('film',24)}</div>`}
+     </div>
+     <div class="publish-details">
+      <label class="field" style="margin:0;">Channel & Platform
+       <select name="account_id" id="publish-account-select">
+        ${accounts.map(a => `<option value="${esc(a.id)}">${esc(a.platform_name)} (${esc(a.handle)})</option>`).join('')}
+       </select>
+      </label>
+      <span class="small muted" style="margin-top:4px;">${ico('sparkle', 12)} Direct API upload · Full 1080x1920 Short</span>
+     </div>
+    </div>
+
+    <label class="field">Title (Max 100 chars)
+     <input name="title" id="pub-title" value="${esc(clipTitle)}" maxlength="100" required>
+    </label>
+
+    <label class="field">Description &amp; Hashtags
+     <textarea name="description" rows="3">${esc(clipDesc)}</textarea>
+    </label>
+
+    <div class="grid2">
+     <label class="field">Privacy
+      <select name="privacy">
+       <option value="public" selected>Public (Immediate feed distribution)</option>
+       <option value="unlisted">Unlisted (Shareable link)</option>
+       <option value="private">Private (Only you)</option>
+      </select>
+     </label>
+     <label class="field">Tags
+      <input name="tags" value="shorts, viral, podcast, entertainment">
+     </label>
+    </div>
+
+    <p class="form-error" hidden></p>
+    <div class="dialog-footer" style="margin-top:14px;">
+     ${btn('Cancel', null, {attrs:act('close')})}
+     <button type="submit" class="btn primary" id="pub-submit-btn">
+      ${ico('share', 16)} Publish Video
+     </button>
+    </div>
+   </form>
+  `
+ });
+
+ const form = $('#publish-form', d);
+ form.onsubmit = e => {
+  e.preventDefault();
+  const submitBtn = $('#pub-submit-btn', form);
+  action(submitBtn, async () => {
+   const data = Object.fromEntries(new FormData(form));
+   data.clip_id = clipId;
+   data.video_url = videoUrl;
+   try {
+    const res = await api('/social/publish', 'POST', data);
+    const pub = res.upload;
+    form.innerHTML = `
+     <div class="publish-success-card">
+      <div class="success-icon-wrap">${ico('check', 30)}</div>
+      <h3 style="font-size:18px;">Published successfully!</h3>
+      <p class="small muted">Your clip has been published to <b>${esc(pub.platform_name)}</b> (${esc(pub.handle)}).</p>
+      <div style="background:#f8f5fc;padding:10px 14px;border-radius:8px;width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;">
+       <a href="${esc(pub.post_url)}" target="_blank" rel="noopener noreferrer" style="color:var(--violet-ink);font-weight:700;word-break:break-all;">
+        ${esc(pub.post_url)} ${ico('external', 13)}
+       </a>
+       <button type="button" class="btn small" onclick="navigator.clipboard.writeText('${esc(pub.post_url)}');toast('Link copied!');">Copy</button>
+      </div>
+      <div class="dialog-footer" style="margin-top:12px;width:100%;">
+       <a href="${esc(pub.post_url)}" target="_blank" rel="noopener noreferrer" class="btn primary">${ico('external', 15)} Open on ${esc(pub.platform_name)}</a>
+       ${btn('Done', null, {attrs:act('close')})}
+      </div>
+     </div>
+    `;
+    toast(`Published to ${pub.platform_name}!`);
+   } catch (err) {
+    formError(form, err.message);
+   }
+  });
+ };
 }
 function help(){
  modal({title:'How to use Cutroom',kicker:'STUDIO GUIDE',body:`<p class="modal-lead">From source file to a finished short, in four steps.</p><div class="help-section"><details open><summary>1. Add your source</summary><p>Choose a local video or use a direct HTTPS URL. In this workspace, link imports are allowed from ${esc(state.config.import_hosts.join(', ')||'the hosts configured by your operator')}. Uploads can be resumed from Projects.</p></details><details><summary>2. Review Cut Score</summary><p>Cutroom estimates how well a moment works on its own using speech, sentence boundaries, delivery, and visual signals. The score is an editorial ranking, not a prediction of virality.</p></details><details><summary>3. Make it yours</summary><p>Edit words in the transcript, trim in the timeline, select an aspect ratio, and add layers. Space plays or pauses. Ctrl/⌘+Z undoes, Ctrl/⌘+Shift+Z redoes, Ctrl/⌘+S saves, and arrow keys scrub.</p></details><details><summary>4. Render and download</summary><p>The export worker burns in captions and applies your settings. Your actual H.264 MP4 and an SRT file appear in Export Center.</p></details></div><div class="dialog-footer" style="justify-content:flex-start">${btn('API documentation','external',{tag:'a',attrs:'href="/api/docs" target="_blank" rel="noopener noreferrer"'})}</div>`});
@@ -340,7 +533,7 @@ function nameDialog(p){
 }
 function clipMenu(c){
  if(!c)return;const a=`data-id="${c.id}"`;
- modal({title:c.title,kicker:'CLIP ACTIONS',body:`<div class="stack">${btn('Edit clip','edit',{attrs:act('edit-clip',a)})}${c.insights.social?btn('Copy social caption','copy',{attrs:act('social',a)}):''}${btn('Duplicate clip','copy',{attrs:act('duplicate-clip',a)})}${btn('Export clip','download',{attrs:act('export-clip',a)})}${btn('Delete clip','trash',{kind:'danger',attrs:act('delete-clip',a)})}</div>`});
+ modal({title:c.title,kicker:'CLIP ACTIONS',body:`<div class="stack">${btn('Publish to Shorts/Reels','share',{kind:'primary',attrs:act('publish-dialog',a)})}${btn('Edit clip','edit',{attrs:act('edit-clip',a)})}${c.insights.social?btn('Copy social caption','copy',{attrs:act('social',a)}):''}${btn('Duplicate clip','copy',{attrs:act('duplicate-clip',a)})}${btn('Export clip','download',{attrs:act('export-clip',a)})}${btn('Delete clip','trash',{kind:'danger',attrs:act('delete-clip',a)})}</div>`});
 }
 
 async function route(){
@@ -357,7 +550,7 @@ async function route(){
  if(screen==='projects'){projectsPage();return;}
  if(screen==='brand'){brandPage();return;}
  if(screen==='exports'){exportsPage();loadJobs().then(()=>{if(state.screen==='exports')fillExports();}).catch(()=>{});return;}
- if(screen==='settings'){settingsPage();loadUsage().then(()=>{if(state.screen==='settings'&&!$('#dialog').open){chrome();const f=$('#settings-form');if(f&&!f.contains(document.activeElement))settingsPage();}}).catch(()=>{});return;}
+ if(screen==='settings'){settingsPage();Promise.all([loadUsage(),loadSocialAccounts()]).then(()=>{if(state.screen==='settings'&&!$('#dialog').open){chrome();const f=$('#settings-form');if(f&&!f.contains(document.activeElement))settingsPage();}}).catch(()=>{});return;}
  view.innerHTML=spinner(screen==='edit'?'Opening clip editor…':'Opening project…');
  try{
   if(!state.me){if(!state.ready)return;throw Error('Sign in to open this project.');}
@@ -395,12 +588,17 @@ async function onAction(name,id,el){
  case 'manual':await action(el,async()=>{const c=await api(`/projects/${state.id}/clips`,'POST');go(`edit/${c.id}`);});break;
  case 'duplicate-clip':await action(el,async()=>{await api(`/clips/${id}/duplicate`,'POST');closeModal();toast('Clip duplicated.');await refreshProject(true);});break;
  case 'delete-clip':confirmDialog('Delete this clip?','Finished exports will remain in Export Center.','Delete clip',async()=>{await api(`/clips/${id}`,'DELETE');closeModal();await refreshProject(true);toast('Clip deleted.');});break;
- case 'play-export':{const j=state.jobs.find(x=>x.id===id);modal({title:j?.output?.title||'Finished clip',kicker:'MP4 PREVIEW',wide:true,body:`<video class="preview-loading" src="/api/jobs/${id}/download?inline=true" controls playsinline preload="metadata"></video><div class="dialog-footer">${btn('Download MP4','download',{tag:'a',kind:'primary',attrs:`href="/api/jobs/${id}/download" download`})}</div>`});break;}
+ case 'play-export':{const j=state.jobs.find(x=>x.id===id);modal({title:j?.output?.title||'Finished clip',kicker:'MP4 PREVIEW',wide:true,body:`<video class="preview-loading" src="/api/jobs/${id}/download?inline=true" controls playsinline preload="metadata"></video><div class="dialog-footer" style="display:flex;gap:8px;">${btn('Publish to Shorts/Reels','share',{kind:'primary',attrs:act('publish-export',`data-id="${id}"`)})}${btn('Download MP4','download',{tag:'a',attrs:`href="/api/jobs/${id}/download" download`})}</div>`});break;}
  case 'delete-export':confirmDialog('Remove this export?','The rendered file will be removed. Your editable clip and original video will stay saved.','Remove export',async()=>{await api(`/jobs/${id}`,'DELETE');await loadJobs();fillExports();closeModal();toast('Export removed.');});break;
  case 'brand-create':await brandForm();break;case 'brand-from-preset':await brandForm(null,id);break;case 'brand-edit':await brandForm(state.brands.find(x=>x.id===id));break;
  case 'brand-delete':confirmDialog('Delete this brand kit?','Existing clips keep their saved style and assets.','Delete brand kit',async()=>{await api(`/brands/${id}`,'DELETE');await loadBrand();closeModal();brandPage();toast('Brand kit deleted.');});break;
  case 'billing-checkout':case 'billing-portal':await action(el,async()=>{const a=await api('/billing/'+name.split('-')[1],'POST');window.open(a.url,'_blank','noopener,noreferrer')||location.assign(a.url);});break;
- case 'preview-livestream':{const res=await api('/livestream/clips').catch(()=>({clips:[]}));const c=(res.clips||[]).find(x=>x.id===id);if(!c)return;modal({title:c.title||'Live Stream Clip',kicker:'GTA6 CLIPPER ENGINE',wide:true,body:`<video class="preview-loading" src="${esc(c.video_url)}" controls autoplay playsinline style="max-height:70vh;border-radius:var(--radius);"></video><div class="dialog-footer" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--muted);">${ico('sparkle',12)} Engine: ${esc(c.engine)} · Streamer: ${esc(c.streamer||'Live')} · ${time(c.duration)}</span>${btn('Download MP4','download',{tag:'a',kind:'primary',attrs:`href="${esc(c.video_url)}" download="${esc(c.id)}.mp4"`})}</div>`});break;}
+ case 'preview-livestream':{const res=await api('/livestream/clips').catch(()=>({clips:[]}));const c=(res.clips||[]).find(x=>x.id===id);if(!c)return;modal({title:c.title||'Live Stream Clip',kicker:'GTA6 CLIPPER ENGINE',wide:true,body:`<video class="preview-loading" src="${esc(c.video_url)}" controls autoplay playsinline style="max-height:70vh;border-radius:var(--radius);"></video><div class="dialog-footer" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12px;color:var(--muted);">${ico('sparkle',12)} Engine: ${esc(c.engine)} · Streamer: ${esc(c.streamer||'Live')} · ${time(c.duration)}</span><div style="display:flex;gap:8px;">${btn('Publish to Shorts/Reels','share',{kind:'primary',attrs:act('publish-livestream',`data-id="${esc(c.id)}"`)})}${btn('Download MP4','download',{tag:'a',attrs:`href="${esc(c.video_url)}" download="${esc(c.id)}.mp4"`})}</div></div>`});break;}
+ case 'publish-dialog':{const c=clipFind(id);if(c)publishDialog({clipId:c.id,videoUrl:c.video,title:c.title,description:c.insights?.social});break;}
+ case 'publish-export':{const j=state.jobs.find(x=>x.id===id);if(j)publishDialog({clipId:j.clip_id,videoUrl:`/api/jobs/${id}/download?inline=true`,title:j.output?.title||'Finished Clip'});break;}
+ case 'publish-livestream':{const res=await api('/livestream/clips').catch(()=>({clips:[]}));const c=(res.clips||[]).find(x=>x.id===id);if(c)publishDialog({clipId:c.id,videoUrl:c.video_url,title:c.title,description:`${c.title}\n\n#Shorts #viral #streamer`});break;}
+ case 'social-connect':connectSocialDialog(id||'youtube');break;
+ case 'social-disconnect':await api(`/social/accounts/${id}`,'DELETE');await loadSocialAccounts();if(state.screen==='settings')settingsPage();toast('Account disconnected.');break;
  }
 }
 document.addEventListener('click',e=>{const t=e.target.closest('[data-action]');if(!t||t.disabled)return;e.preventDefault();onAction(t.dataset.action,t.dataset.id,t).catch(e=>toast(e.message||'Could not finish the action.','error'));});
@@ -413,7 +611,7 @@ async function init(){
  if(info.status==='fulfilled'){state.me=info.value.user;state.config=info.value.config;}
  if(samples.status==='fulfilled')state.samples=samples.value;
  if(presets.status==='fulfilled')state.presets=presets.value;
- await Promise.allSettled([loadProjects(),loadUsage(),loadBrand(),loadJobs()]);state.ready=true;
+ await Promise.allSettled([loadProjects(),loadUsage(),loadBrand(),loadJobs(),loadSocialAccounts()]);state.ready=true;
  await route();if(info.status==='rejected')toast(info.reason.message,'error');
  try{
   const q=new URLSearchParams(location.search);

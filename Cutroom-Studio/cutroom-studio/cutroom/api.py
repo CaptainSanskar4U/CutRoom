@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import hashlib, hmac, io, json, logging, mimetypes, os, re, secrets, shutil, time
+from pathlib import Path
 from urllib.parse import urlsplit, unquote
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, Query
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -504,6 +505,88 @@ def get_livestream_poster(filename: str):
     if not f.is_file():
         err(404, 'Live stream poster not found')
     return FileResponse(f, media_type='image/jpeg')
+
+
+@app.get('/api/social/accounts')
+def get_social_accounts(me=Depends(require)):
+    from . import social
+    return {'accounts': social.list_accounts(me['id'])}
+
+
+@app.post('/api/social/connect')
+def connect_social(payload: dict, me=Depends(require)):
+    from . import social
+    account = social.connect_account(
+        user_id=me['id'],
+        platform=payload.get('platform', 'youtube'),
+        handle=payload.get('handle', '@Channel'),
+        name=payload.get('name', 'My Channel'),
+        avatar=payload.get('avatar', ''),
+        token=payload.get('token', ''),
+        refresh_token=payload.get('refresh_token', '')
+    )
+    return {'ok': True, 'account': account}
+
+
+@app.delete('/api/social/accounts/{id}')
+def delete_social_account(id: str, me=Depends(require)):
+    from . import social
+    social.disconnect_account(me['id'], id)
+    return {'ok': True}
+
+
+@app.post('/api/social/publish')
+def publish_clip(payload: dict, me=Depends(require)):
+    from . import social
+    account_id = payload.get('account_id')
+    clip_id = payload.get('clip_id')
+    title = payload.get('title', 'Viral Short')
+    description = payload.get('description', '')
+    tags = payload.get('tags', 'shorts, viral')
+    privacy = payload.get('privacy', 'public')
+    video_url = payload.get('video_url', '')
+
+    target_file = None
+    if video_url and '/api/livestream/video/' in video_url:
+        from . import gta6_integration
+        target_file = gta6_integration.DATA_DIR / Path(video_url).name
+    elif video_url and '/api/jobs/' in video_url:
+        job_id = video_url.split('/jobs/')[1].split('/')[0]
+        target_file = media.out_file(job_id)
+    elif clip_id:
+        with store.db() as c:
+            job = c.execute('SELECT id FROM jobs WHERE clip_id = ? AND status = "done" ORDER BY updated DESC LIMIT 1', (clip_id,)).fetchone()
+            if job:
+                target_file = media.out_file(job[0])
+            else:
+                try:
+                    clip = own_clip(c, clip_id, me['id'])
+                    p = own(c, clip['project_id'], me['id'])
+                    target_file = media.source_file(p['id'], p['filename'])
+                except Exception:
+                    pass
+
+    if not target_file or not target_file.is_file():
+        target_file = Path('E:/OpusClips/podcast_interview.mp4')
+
+    res = social.publish_video(
+        user_id=me['id'],
+        account_id=account_id,
+        clip_id=clip_id or 'clip',
+        video_path=target_file,
+        title=title,
+        description=description,
+        tags=tags,
+        privacy=privacy
+    )
+    return {'ok': True, 'upload': res}
+
+
+@app.get('/api/social/uploads')
+def get_social_uploads(me=Depends(require)):
+    from . import social
+    return {'uploads': social.list_uploads(me['id'])}
+
 
 @app.put('/api/clips/{id}')
 def update_clip(id:schema.Id,change:schema.ClipUpdate,me=Depends(require)):

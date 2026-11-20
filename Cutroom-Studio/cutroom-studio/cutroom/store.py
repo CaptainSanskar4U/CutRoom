@@ -47,13 +47,14 @@ def get_pool():
 def db(write=False):
     pool = get_pool()
     if pool:
-        try:
-            with pool.connection(timeout=6.0) as c:
+        with pool.connection(timeout=6.0) as c:
+            try:
                 yield Connection(c)
                 c.commit()
-                return
-        except Exception:
-            pass
+            except BaseException:
+                c.rollback()
+                raise
+        return
 
     if POSTGRES:
         import psycopg
@@ -122,6 +123,21 @@ CREATE TABLE IF NOT EXISTS brands (
 CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, seen DOUBLE PRECISION NOT NULL);
 CREATE TABLE IF NOT EXISTS webhook_events (id TEXT PRIMARY KEY, created DOUBLE PRECISION NOT NULL);
 CREATE TABLE IF NOT EXISTS throttles (key TEXT PRIMARY KEY, since DOUBLE PRECISION NOT NULL, hits INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS social_accounts (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL, handle TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT,
+  token TEXT, refresh_token TEXT, expires DOUBLE PRECISION, meta TEXT NOT NULL DEFAULT '{}',
+  connected_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS social_account_owner ON social_accounts(user_id,platform);
+CREATE TABLE IF NOT EXISTS social_uploads (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  account_id TEXT REFERENCES social_accounts(id) ON DELETE SET NULL,
+  clip_id TEXT, platform TEXT NOT NULL, title TEXT NOT NULL, description TEXT, tags TEXT,
+  privacy TEXT NOT NULL DEFAULT 'public', status TEXT NOT NULL DEFAULT 'published',
+  post_url TEXT, post_id TEXT, error TEXT, created_at DOUBLE PRECISION NOT NULL
+);
+CREATE INDEX IF NOT EXISTS social_uploads_owner ON social_uploads(user_id,created_at DESC);
 '''
 
 def init():
